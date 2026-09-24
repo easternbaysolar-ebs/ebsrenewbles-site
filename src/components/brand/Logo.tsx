@@ -8,23 +8,17 @@ export function Logo({ className, compact = false }: { className?: string; compa
     >
       <span aria-hidden className="relative size-8 shrink-0 overflow-hidden rounded-sm">
         <img
-          src="/brand/easternbay-icon-light.jpeg"
+          src="/brand/easternbay-icon.jpeg"
           alt=""
-          className="absolute left-[-9px] top-[-9px] size-12 max-w-none object-cover dark:hidden"
-        />
-        <img
-          src="/brand/easternbay-icon-dark.jpeg"
-          alt=""
-          className="absolute left-[-9px] top-[-9px] hidden size-12 max-w-none object-cover dark:block"
+          className="absolute inset-0 size-full object-cover"
         />
       </span>
       {!compact && (
-        <span className="relative h-8 w-[8.5rem] overflow-hidden" aria-hidden>
-          <img
-            src="/brand/easternbay-wordmark.jpeg"
-            alt="Eastern Bay Renewables"
-            className="absolute left-[-31px] top-[-36px] h-auto w-[194px] max-w-none object-contain dark:invert"
-          />
+        <span className="flex flex-col leading-none">
+          <span className="text-[15px] font-semibold tracking-tight">Easternbay</span>
+          <span className="text-[10px] font-medium uppercase tracking-[0.2em] text-muted-foreground">
+            Renewables
+          </span>
         </span>
       )}
     </span>
