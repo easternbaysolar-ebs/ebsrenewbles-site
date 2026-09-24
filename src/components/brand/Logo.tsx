@@ -4,13 +4,13 @@ export function Logo({ className, compact = false }: { className?: string; compa
   return (
     <span
       className={cn("inline-flex items-center gap-2.5", className)}
-      aria-label={compact ? "Eastern Bay Renewables" : undefined}
+      aria-label={compact ? "Easternbay Renewables" : undefined}
     >
       <span aria-hidden className="relative size-8 shrink-0 overflow-hidden rounded-sm">
         <img
           src="/brand/easternbay-logo-transparent.png"
           alt=""
-          className="absolute inset-0 size-full object-cover"
+          className="absolute inset-1 size-full object-cover"
         />
       </span>
       {!compact && (
