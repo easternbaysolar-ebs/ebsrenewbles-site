@@ -10,7 +10,7 @@ export function Logo({ className, compact = false }: { className?: string; compa
         <img
           src="/brand/easternbay-logo-transparent.png"
           alt=""
-          className="absolute inset-1 size-full object-cover"
+          className="absolute inset-0 size-full translate-y-px scale-150 object-contain"
         />
       </span>
       {!compact && (
