@@ -8,6 +8,7 @@ export function LoginPage() {
   const [mode, setMode] = useState("login"),
     [email, setEmail] = useState(""),
     [password, setPassword] = useState(""),
+    [showPassword, setShowPassword] = useState(false),
     [message, setMessage] = useState(""),
     [busy, setBusy] = useState(false);
   const { user } = useSession();
@@ -112,17 +113,31 @@ export function LoginPage() {
               </label>
             )}
             {mode !== "reset" && (
-              <label className="block space-y-2">
-                Password
+              <div className="space-y-2">
+                <label htmlFor="workspace-password">Password</label>
+                <div className="relative">
                 <Input
-                  type="password"
+                  id="workspace-password"
+                  type={showPassword ? "text" : "password"}
+                  className="pr-16"
                   autoComplete={mode === "login" ? "current-password" : "new-password"}
                   minLength={mode === "login" ? 1 : 12}
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                 />
-              </label>
+                <button
+                  type="button"
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  aria-controls="workspace-password"
+                  aria-pressed={showPassword}
+                  onClick={() => setShowPassword((visible) => !visible)}
+                  className="absolute inset-y-0 right-0 rounded-r-md px-3 text-sm font-medium text-muted-foreground hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
+                >
+                  {showPassword ? "Hide" : "Show"}
+                </button>
+                </div>
+              </div>
             )}
             <Button disabled={busy} className="w-full">
               {busy
@@ -144,6 +159,7 @@ export function LoginPage() {
                     key={x}
                     onClick={() => {
                       setMode(x);
+                      setShowPassword(false);
                       setMessage("");
                     }}
                     className="underline"
@@ -167,3 +183,4 @@ export function LoginPage() {
     </Page>
   );
 }
+
