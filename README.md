@@ -64,4 +64,3 @@ Official scheme references: [PM Surya Ghar](https://pmsuryaghar.gov.in/) and [PM
 
 See VALIDATION.md. Permission tests run inside a rolled-back SQL transaction; calculator tests use Node's built-in test runner. Owner login, email delivery and authenticated dashboard/upload browser flows still need verification using a real, confirmed authorised account.
 
-
