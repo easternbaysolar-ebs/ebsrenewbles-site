@@ -8,7 +8,7 @@ export function Logo({ className, compact = false }: { className?: string; compa
     >
       <span aria-hidden className="relative size-8 shrink-0 overflow-hidden rounded-sm">
         <img
-          src="/brand/easternbay-logo.jpeg"
+          src="/brand/easternbay-logo-transparent.png"
           alt=""
           className="absolute inset-0 size-full object-cover"
         />
