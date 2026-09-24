@@ -93,13 +93,20 @@ function HomePage() {
       <div className="relative overflow-hidden border-b border-border">
         <div
           aria-hidden
-          className="pointer-events-none absolute inset-0 bg-cover bg-bottom dark:hidden"
-          style={{ backgroundImage: "url('/brand/solar-sky-light.jpg')" }}
-        />
-        <div
-          aria-hidden
-          className="pointer-events-none absolute inset-0 bg-gradient-to-r from-white/95 via-white/80 to-white/25 dark:hidden"
-        />
+          className="pointer-events-none absolute inset-0 opacity-60 dark:hidden"
+          style={{ containerType: "size" }}
+        >
+          {/* Keep the photograph's horizon at 70% of the hero on every screen. */}
+          <div
+            className="absolute left-1/2 -translate-x-1/2 bg-cover"
+            style={{
+              backgroundImage: "url('/brand/solar-sky-light.jpg')",
+              width: "max(100cqw, 106.1cqh)",
+              height: "max(141.42cqw, 150cqh)",
+              top: "calc(70cqh - max(114.55cqw, 121.5cqh))",
+            }}
+          />
+        </div>
         <div aria-hidden className="grid-lines pointer-events-none absolute inset-0 hidden opacity-70 dark:block" />
         <div className="relative mx-auto w-full max-w-6xl px-5 py-20 sm:px-8 md:py-32">
           <div className="grid gap-14 lg:grid-cols-[1.1fr_0.9fr] lg:items-center">
