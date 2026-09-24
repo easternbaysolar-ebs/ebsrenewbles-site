@@ -91,7 +91,16 @@ function HomePage() {
     <PublicLayout>
       {/* Hero */}
       <div className="relative overflow-hidden border-b border-border">
-        <div aria-hidden className="grid-lines pointer-events-none absolute inset-0 opacity-70" />
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 bg-cover bg-bottom dark:hidden"
+          style={{ backgroundImage: "url('/brand/solar-sky-light.jpg')" }}
+        />
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 bg-gradient-to-r from-white/95 via-white/80 to-white/25 dark:hidden"
+        />
+        <div aria-hidden className="grid-lines pointer-events-none absolute inset-0 hidden opacity-70 dark:block" />
         <div className="relative mx-auto w-full max-w-6xl px-5 py-20 sm:px-8 md:py-32">
           <div className="grid gap-14 lg:grid-cols-[1.1fr_0.9fr] lg:items-center">
             <div className="rise-in">
@@ -127,7 +136,7 @@ function HomePage() {
                 ))}
               </dl>
             </div>
-            <figure className="relative overflow-hidden">
+            <figure className="relative hidden overflow-hidden dark:block">
               <img
                 src="https://images.unsplash.com/photo-1552197892-f2ad2f75e7c8?auto=format&fit=crop&w=1400&q=85"
                 alt="Aerial view of rooftop solar panels"
