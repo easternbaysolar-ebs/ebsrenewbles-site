@@ -253,3 +253,10 @@
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; scroll-behavior: auto !important; } }
 .eyebrow { font-size: .75rem; }
 
+/* Hide browser-specific increment/decrement controls in calculator fields. */
+.calculator-number-input::-webkit-inner-spin-button,
+.calculator-number-input::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.calculator-number-input { appearance: textfield; -moz-appearance: textfield; }

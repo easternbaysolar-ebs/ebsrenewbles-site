@@ -74,6 +74,24 @@ export interface CalculatorResult {
   offsetPercent: number | null;
 }
 
+
+/** PM Surya Ghar CFA estimate for eligible residential rooftop systems. */
+export function calculatePmSuryaGharCfa(systemKw: number): number {
+  if (!Number.isFinite(systemKw) || systemKw <= 0) return 0;
+  return Math.round(Math.min(systemKw, 2) * 30_000 + Math.min(Math.max(systemKw - 2, 0), 1) * 18_000);
+}
+
+/** Standard reducing-balance monthly EMI; returns 0 for invalid loan inputs. */
+export function calculateLoanEmi(principal: number, annualRatePercent: number, termYears: number): number {
+  if (!Number.isFinite(principal) || principal <= 0 || !Number.isFinite(annualRatePercent) || annualRatePercent < 0 || !Number.isFinite(termYears) || termYears <= 0) return 0;
+  const months = termYears * 12;
+  const monthlyRate = annualRatePercent / 1200;
+  return monthlyRate === 0 ? principal / months : (principal * monthlyRate) / (1 - Math.pow(1 + monthlyRate, -months));
+}
+
+/** CEA Version 22.0 weighted-average Indian grid factor, FY 2025–26. */
+export const INDIA_GRID_TCO2_PER_MWH = 0.675;
+
 function roundKw(kw: number) {
   if (kw <= 0) return 0;
   if (kw < 10) return Math.ceil(kw * 2) / 2; // round up to 0.5 kW

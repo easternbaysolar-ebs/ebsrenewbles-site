@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { productsQuery, schemesQuery, calculatorAssumptionsQuery } from "@/lib/queries";
 import { db, safeUrl } from "@/lib/db";
-import { calculateSystem, DEFAULT_ASSUMPTIONS, type PropertyType } from "@/lib/calculator";
+import { calculateLoanEmi, calculatePmSuryaGharCfa, calculateSystem, DEFAULT_ASSUMPTIONS, INDIA_GRID_TCO2_PER_MWH, type PropertyType } from "@/lib/calculator";
 import { ArrowUpRight, Sun, Zap, Battery, Layers } from "lucide-react";
 export function Page({
   title,
@@ -280,6 +280,9 @@ export function CalculatorPage() {
   const [sector, setSector] = useState<PropertyType>("residential");
   const [tariff, setTariff] = useState(8);
   const [cost, setCost] = useState(60000);
+  const [loanAmount, setLoanAmount] = useState(200000);
+  const [loanRate, setLoanRate] = useState(5.75);
+  const [loanYears, setLoanYears] = useState(5);
   const settings = useQuery(calculatorAssumptionsQuery);
   const locations = {
     andhra: { name: "Andhra Pradesh", sunshine: 5.2, yield: 5.2 },
@@ -324,6 +327,10 @@ export function CalculatorPage() {
   const annualSavings = monthlySavings * 12;
   const paybackYears =
     result && annualSavings > 0 ? result.indicativeSystemCost / annualSavings : null;
+  const cfa = result && sector === "residential" ? calculatePmSuryaGharCfa(result.recommendedKw) : 0;
+  const afterSubsidyCost = result ? Math.max(0, result.indicativeSystemCost - cfa) : 0;
+  const monthlyEmi = calculateLoanEmi(loanAmount, loanRate, loanYears);
+  const totalRepayment = monthlyEmi * loanYears * 12;
   function number(label: string, value: number, set: (n: number) => void, min = 0, hint?: string) {
     return (
       <div className="space-y-2">
@@ -335,6 +342,7 @@ export function CalculatorPage() {
           type="number"
           min={min}
           step="any"
+          className="calculator-number-input"
           value={value || ""}
           onChange={(e) => set(Number(e.target.value))}
         />
@@ -381,6 +389,7 @@ export function CalculatorPage() {
               type="number"
               min="1"
               step="any"
+              className="calculator-number-input"
               placeholder="e.g. 50"
               value={roofArea}
               onChange={(e) => setRoofArea(e.target.value)}
@@ -454,8 +463,8 @@ export function CalculatorPage() {
               {number("Indicative system cost (₹/kW)", cost, setCost, 1)}
             </div>
             <p className="text-xs text-muted-foreground">
-              Cost assumptions can be updated by Easternbay. Estimates exclude applicable subsidies,
-              financing, maintenance and export-tariff differences.
+              Cost assumptions can be updated by Easternbay. Estimates exclude financing, maintenance
+              and export-tariff differences.
             </p>
             {settings.data && (
               <Button
@@ -492,6 +501,9 @@ export function CalculatorPage() {
               <dl className="mt-5 grid grid-cols-2 gap-x-6 gap-y-6">
                 {[
                   ["Estimated system cost", money(result.indicativeSystemCost)],
+                  ...(sector === "residential"
+                    ? [["Indicative PM Surya Ghar CFA", money(cfa)], ["Estimated cost after CFA", money(afterSubsidyCost)]]
+                    : []),
                   [
                     "Estimated monthly generation",
                     `${result.monthlyGenerationUnits.toLocaleString("en-IN")} units`,
@@ -517,9 +529,9 @@ export function CalculatorPage() {
                 </p>
               )}
               <p className="mt-7 border-t border-background/20 pt-5 text-xs leading-relaxed opacity-70">
-                Subsidy eligibility and amounts depend on the current scheme, system type and
-                approval. This estimate does not include a subsidy. Final design, pricing and
-                savings are confirmed after assessment.
+                {sector === "residential"
+                  ? "The PM Surya Ghar CFA shown is an indicative residential estimate based on system capacity (₹30,000/kW for the first 2 kW and ₹18,000 for the third kW, capped at ₹78,000). Actual eligibility, approved vendor, installation and disbursement requirements apply; confirm through the official portal."
+                  : "PM Surya Ghar central financial assistance is for eligible residential rooftop systems and is not included for this property type."} Final design, pricing and savings are confirmed after assessment.
               </p>
               <a
                 href="/quote"
@@ -535,6 +547,41 @@ export function CalculatorPage() {
           )}
         </section>
       </div>
+
+      <section className="panel mt-8 p-6 sm:p-8" aria-labelledby="environment-impact-heading">
+        <p className="eyebrow">A cleaner energy mix</p>
+        <h2 id="environment-impact-heading" className="mt-2 text-2xl font-semibold">Estimated environmental impact</h2>
+        {result ? (
+          <div className="mt-6 grid gap-6 sm:grid-cols-2">
+            <div><p className="text-3xl font-semibold">{((result.annualGenerationUnits * INDIA_GRID_TCO2_PER_MWH) / 1000).toFixed(2)} t</p><p className="mt-2 text-sm text-muted-foreground">Indicative CO₂ emissions avoided per year</p></div>
+            <div><p className="text-3xl font-semibold">{result.annualGenerationUnits.toLocaleString("en-IN")} kWh</p><p className="mt-2 text-sm text-muted-foreground">Estimated annual solar generation</p></div>
+          </div>
+        ) : <p className="mt-4 text-sm text-muted-foreground">Enter your monthly bill to estimate annual solar generation and avoided emissions.</p>}
+        <p className="mt-5 text-xs text-muted-foreground">Illustrative estimate using the CEA Version 22.0 weighted-average Indian grid emission factor for FY 2025–26 (0.675 tCO₂/MWh). Actual emissions avoided depend on generation and grid conditions.</p>
+      </section>
+      <section className="panel mt-8 space-y-6 p-6 sm:p-8" aria-labelledby="loan-calculator-heading">
+        <div>
+          <p className="eyebrow">Residential PM solar loan illustration</p>
+          <h2 id="loan-calculator-heading" className="mt-2 text-2xl font-semibold">Estimate your monthly EMI</h2>
+          <p className="mt-2 text-sm text-muted-foreground">Rates supplied for this calculator: 5.75% p.a. up to ₹2 lakh; 7.90–9.00% p.a. above ₹2 lakh to ₹6 lakh. For amounts over ₹2 lakh, choose an illustrative rate in that range.</p>
+        </div>
+        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+          {number("Loan amount (₹)", loanAmount, (amount) => { const capped = Math.min(amount, 600000); setLoanAmount(capped); setLoanRate(capped <= 200000 ? 5.75 : 7.9); }, 1, "Illustrative range: up to ₹6 lakh.")}
+          {loanAmount <= 200000 ? (
+            <div className="space-y-2"><label className="block text-sm font-medium">Annual interest rate</label><p className="rounded border bg-muted/40 p-3">5.75% p.a.</p><p className="text-xs text-muted-foreground">Floating, collateral-free rate for loans up to ₹2 lakh, as provided.</p></div>
+          ) : (
+            <label className="block space-y-2 text-sm font-medium">Annual interest rate
+              <select className="w-full rounded border bg-background p-3" value={loanRate} onChange={(e) => setLoanRate(Number(e.target.value))}><option value={7.9}>7.90% p.a.</option><option value={8.45}>8.45% p.a.</option><option value={9}>9.00% p.a.</option></select>
+              <span className="block text-xs font-normal text-muted-foreground">Actual rate depends on bank and CIBIL score.</span>
+            </label>
+          )}
+          {number("Loan term (years)", loanYears, setLoanYears, 1, "Enter the repayment period.")}
+          <div><p className="text-sm font-medium">Illustrative monthly EMI</p><p className="mt-3 text-3xl font-semibold">{money(monthlyEmi)}</p></div>
+        </div>
+        <div className="grid gap-4 border-t pt-5 text-sm sm:grid-cols-2"><p>Total estimated repayment: <strong>{money(totalRepayment)}</strong></p><p>Estimated interest over term: <strong>{money(Math.max(0, totalRepayment - loanAmount))}</strong></p></div>
+        {result && sector === "residential" && <Button variant="outline" onClick={() => { setLoanAmount(Math.max(1, Math.min(afterSubsidyCost, 600000))); setLoanRate(afterSubsidyCost <= 200000 ? 5.75 : 7.9); }}>Use estimated cost after CFA</Button>}
+        <p className="text-xs text-muted-foreground">Illustration only. The 5.75% rate is described as floating and collateral-free for loans up to ₹2 lakh. Above ₹2 lakh and up to ₹6 lakh, the supplied 7.90–9.00% range depends on lender and CIBIL score. Bank eligibility, rate resets, fees, tenure and sanction terms may change the actual EMI. Check current lender terms before applying.</p>
+      </section>
     </Page>
   );
 }
