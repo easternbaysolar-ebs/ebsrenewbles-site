@@ -7,6 +7,7 @@ import { ThemeToggle } from "@/components/site/ThemeToggle";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
+import { useMyProfile, useMyRoles, useSession } from "@/lib/auth";
 
 const NAV = [
   { to: "/", label: "Home" },
@@ -26,6 +27,11 @@ const SOLUTIONS = [
 
 export function SiteHeader() {
   const [open, setOpen] = useState(false);
+  const { user } = useSession();
+  const { isAdmin, isStaff } = useMyRoles();
+  const profile = useMyProfile();
+  const accountRoute = isAdmin ? "/admin" : isStaff ? "/employee" : "/auth";
+  const accountLabel = user ? profile.data?.full_name || "My account" : "Login";
 
   return (
     <header className="sticky top-0 z-50 border-b border-border bg-background/85 backdrop-blur-xl">
@@ -75,7 +81,9 @@ export function SiteHeader() {
         <div className="flex items-center gap-2">
           <ThemeToggle className="hidden sm:grid" />
           <Button asChild variant="outline" size="sm" className="hidden sm:inline-flex">
-            <Link to="/auth">Login</Link>
+            <Link to={accountRoute} className="max-w-32 truncate">
+              {accountLabel}
+            </Link>
           </Button>
           <Button asChild size="sm" className="hidden md:inline-flex">
             <Link to="/quote">Get a Quote</Link>
@@ -121,7 +129,9 @@ export function SiteHeader() {
                     <Link to="/quote">Get a Quote</Link>
                   </Button>
                   <Button asChild variant="outline" onClick={() => setOpen(false)}>
-                    <Link to="/auth">Login</Link>
+                    <Link to={accountRoute} className="truncate">
+                      {accountLabel}
+                    </Link>
                   </Button>
                   <div className="pt-1">
                     <ThemeToggle />
@@ -135,4 +145,3 @@ export function SiteHeader() {
     </header>
   );
 }
-

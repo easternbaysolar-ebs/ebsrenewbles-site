@@ -77,9 +77,9 @@ export const modules: Record<string, Module> = {
     title: "Employees",
     table: "profiles",
     label: "full_name",
-    columns: ["full_name", "email", "designation", "is_active"],
+    columns: ["full_name", "employee_code", "email", "designation", "is_active"],
     fields: [
-      f("full_name", "Full name"),
+      f("full_name", "Full name", undefined, { required: true }),
       f("phone", "Phone"),
       f("designation", "Designation"),
       f("employee_code", "Employee code"),

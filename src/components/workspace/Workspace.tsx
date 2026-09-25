@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { LogOut, Plus, ArrowUpRight, Menu, X, Download, Sun } from "lucide-react";
-import { useMyRoles, useSession, useSignOut, APP_ROLES, ROLE_LABELS } from "@/lib/auth";
+import { Plus, ArrowUpRight, Menu, X, Download, Sun } from "lucide-react";
+import { useMyRoles, useSession, APP_ROLES, ROLE_LABELS } from "@/lib/auth";
 import { db, safeUrl } from "@/lib/db";
 import { modules, type Field } from "@/lib/modules";
 import { ThemeToggle } from "@/components/site/ThemeToggle";
@@ -17,6 +17,9 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
+import { ContactSettings } from "./ContactSettings";
+import { ProfileMenu } from "./ProfileMenu";
+import { validateContact } from "@/lib/contact";
 type Row = Record<string, any>;
 const money = (n: number) =>
   new Intl.NumberFormat("en-IN", {
@@ -27,7 +30,6 @@ const money = (n: number) =>
 export function Workspace({ admin }: { admin: boolean }) {
   const roles = useMyRoles(),
     { user, loading } = useSession();
-  const signOut = useSignOut();
   const [section, setSection] = useState("overview"),
     [menu, setMenu] = useState(false);
   if (loading || roles.loading) return <div className="p-12">Checking access…</div>;
@@ -54,7 +56,7 @@ export function Workspace({ admin }: { admin: boolean }) {
     : ["leads", "customers", "projects", "tasks", "quotations", "history"];
   return (
     <div className="min-h-screen bg-surface/40">
-      <header className="flex h-20 items-center justify-between border-b bg-background px-5">
+      <header className="flex min-h-20 flex-wrap items-center justify-between gap-3 border-b bg-background px-3 py-3 sm:px-5">
         <div className="flex items-center gap-5">
           <Button
             size="icon"
@@ -74,16 +76,7 @@ export function Workspace({ admin }: { admin: boolean }) {
         </div>
         <div className="flex items-center gap-3">
           <ThemeToggle />
-          <Button
-            variant="ghost"
-            aria-label="Sign out"
-            onClick={async () => {
-              await signOut();
-              window.location.href = "/auth";
-            }}
-          >
-            <LogOut size={18} />
-          </Button>
+          <ProfileMenu admin={admin} />
         </div>
       </header>
       <div className="flex">
@@ -93,22 +86,30 @@ export function Workspace({ admin }: { admin: boolean }) {
           }
         >
           <p className="eyebrow mb-5">Work & operations</p>
-          {["overview", ...keys, ...(admin ? ["reports"] : []), "uploads"].map((k) => (
-            <button
-              key={k}
-              onClick={() => {
-                setSection(k);
-                setMenu(false);
-              }}
-              className={
-                "mb-1 block w-full rounded px-3 py-3 text-left text-sm " +
-                (section === k ? "bg-foreground text-background" : "hover:bg-muted")
-              }
-            >
-              {modules[k]?.["title"] ??
-                (k === "overview" ? "Overview" : k === "reports" ? "Reports" : "Project uploads")}
-            </button>
-          ))}
+          {["overview", ...keys, ...(admin ? ["contact_links", "reports"] : []), "uploads"].map(
+            (k) => (
+              <button
+                key={k}
+                onClick={() => {
+                  setSection(k);
+                  setMenu(false);
+                }}
+                className={
+                  "mb-1 block w-full rounded px-3 py-3 text-left text-sm " +
+                  (section === k ? "bg-foreground text-background" : "hover:bg-muted")
+                }
+              >
+                {modules[k]?.["title"] ??
+                  (k === "overview"
+                    ? "Overview"
+                    : k === "reports"
+                      ? "Reports"
+                      : k === "contact_links"
+                        ? "Contact & social links"
+                        : "Project uploads")}
+              </button>
+            ),
+          )}
           <a className="mt-8 flex items-center gap-2 px-3 text-sm text-muted-foreground" href="/">
             View website <ArrowUpRight size={14} />
           </a>
@@ -121,9 +122,13 @@ export function Workspace({ admin }: { admin: boolean }) {
                 ? "A clear view of your day."
                 : section === "reports"
                   ? "Business reports"
-                  : "Project documents")}
+                  : section === "contact_links"
+                    ? "Contact & social links"
+                    : "Project documents")}
           </h1>
-          {section === "overview" || section === "reports" ? (
+          {section === "contact_links" && admin ? (
+            <ContactSettings />
+          ) : section === "overview" || section === "reports" ? (
             <Overview admin={admin} reports={section === "reports"} />
           ) : section === "uploads" ? (
             <Uploads userId={user["id"]} />
@@ -399,6 +404,8 @@ function Records({
           throw Error("Enter a valid http or https URL");
         payload[f.key] = v;
       }
+      if (config.table === "site_content" && payload["key"] === "contact.details")
+        validateContact(payload["value"]);
       if (config.table === "tasks" && payload["status"] === "completed")
         payload["completed_at"] = new Date().toISOString();
       if (!record["id"] && ["tasks", "quotations"].includes(config.table))

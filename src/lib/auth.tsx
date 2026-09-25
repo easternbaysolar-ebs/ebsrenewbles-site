@@ -102,8 +102,9 @@ export function useMyProfile() {
 export function useSignOut() {
   const queryClient = useQueryClient();
   return async () => {
+    const { error } = await supabase.auth.signOut();
+    if (error) throw error;
     await queryClient.cancelQueries();
     queryClient.clear();
-    await supabase.auth.signOut();
   };
 }

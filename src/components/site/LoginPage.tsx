@@ -1,23 +1,26 @@
 import { useState } from "react";
 import { Page } from "./PublicPages";
-import { useMyRoles, useSession } from "@/lib/auth";
+import { useMyProfile, useMyRoles, useSession } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 export function LoginPage() {
   const [mode, setMode] = useState("login"),
     [email, setEmail] = useState(""),
+    [fullName, setFullName] = useState(""),
     [password, setPassword] = useState(""),
     [showPassword, setShowPassword] = useState(false),
     [message, setMessage] = useState(""),
     [busy, setBusy] = useState(false);
   const { user } = useSession();
   const { isAdmin, isStaff } = useMyRoles();
+  const profile = useMyProfile();
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
     setMessage("");
     try {
+      if (mode === "register" && fullName.trim().length < 2) throw new Error("Please enter your full name.");
       const result =
         mode === "reset"
           ? await db.auth.resetPasswordForEmail(email, {
@@ -29,7 +32,10 @@ export function LoginPage() {
               ? await db.auth.signUp({
                   email,
                   password,
-                  options: { emailRedirectTo: window.location.origin + "/auth" },
+                  options: {
+                    emailRedirectTo: window.location.origin + "/auth",
+                    data: { full_name: fullName.trim() },
+                  },
                 })
               : await db.auth.signInWithPassword({ email, password });
       if (result.error) throw result.error;
@@ -56,7 +62,12 @@ export function LoginPage() {
       <div className="mx-auto max-w-lg panel p-8">
         {user && mode !== "password" ? (
           <>
-            <p className="mb-6">Signed in as {user.email}</p>
+            <div className="mb-6">
+              <p className="font-medium">{profile.data?.full_name || user.email}</p>
+              <p className="text-sm text-muted-foreground">
+                {profile.data?.employee_code || user.email}
+              </p>
+            </div>
             {isStaff ? (
               <div className="flex flex-wrap gap-3">
                 {isAdmin && (
@@ -100,6 +111,19 @@ export function LoginPage() {
                     ? "Set password"
                     : "Team login"}
             </h2>
+            {mode === "register" && (
+              <label className="block space-y-2">
+                Full name
+                <Input
+                  autoComplete="name"
+                  required
+                  minLength={2}
+                  maxLength={120}
+                  value={fullName}
+                  onChange={(event) => setFullName(event.target.value)}
+                />
+              </label>
+            )}
             {mode !== "password" && (
               <label className="block space-y-2">
                 Email
@@ -116,26 +140,26 @@ export function LoginPage() {
               <div className="space-y-2">
                 <label htmlFor="workspace-password">Password</label>
                 <div className="relative">
-                <Input
-                  id="workspace-password"
-                  type={showPassword ? "text" : "password"}
-                  className="pr-16"
-                  autoComplete={mode === "login" ? "current-password" : "new-password"}
-                  minLength={mode === "login" ? 1 : 12}
-                  required
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                />
-                <button
-                  type="button"
-                  aria-label={showPassword ? "Hide password" : "Show password"}
-                  aria-controls="workspace-password"
-                  aria-pressed={showPassword}
-                  onClick={() => setShowPassword((visible) => !visible)}
-                  className="absolute inset-y-0 right-0 rounded-r-md px-3 text-sm font-medium text-muted-foreground hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
-                >
-                  {showPassword ? "Hide" : "Show"}
-                </button>
+                  <Input
+                    id="workspace-password"
+                    type={showPassword ? "text" : "password"}
+                    className="pr-16"
+                    autoComplete={mode === "login" ? "current-password" : "new-password"}
+                    minLength={mode === "login" ? 1 : 12}
+                    required
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                  />
+                  <button
+                    type="button"
+                    aria-label={showPassword ? "Hide password" : "Show password"}
+                    aria-controls="workspace-password"
+                    aria-pressed={showPassword}
+                    onClick={() => setShowPassword((visible) => !visible)}
+                    className="absolute inset-y-0 right-0 rounded-r-md px-3 text-sm font-medium text-muted-foreground hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
+                  >
+                    {showPassword ? "Hide" : "Show"}
+                  </button>
                 </div>
               </div>
             )}
@@ -183,4 +207,3 @@ export function LoginPage() {
     </Page>
   );
 }
-
