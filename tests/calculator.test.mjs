@@ -4,11 +4,13 @@ import {readFile} from 'node:fs/promises';
 import ts from 'typescript';
 const source=await readFile(new URL('../src/lib/calculator.ts',import.meta.url),'utf8');
 const compiled=ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText;
-const {calculateSystem,DEFAULT_ASSUMPTIONS}=await import('data:text/javascript;base64,'+Buffer.from(compiled).toString('base64'));
+const {calculateSystem,calculatePmSuryaGharCfa,calculateLoanEmi,INDIA_GRID_TCO2_PER_MWH,DEFAULT_ASSUMPTIONS}=await import('data:text/javascript;base64,'+Buffer.from(compiled).toString('base64'));
 const base={propertyType:'residential',monthlyUnits:450,assumptions:DEFAULT_ASSUMPTIONS.residential};
 test('rounds required capacity up and caps savings at consumption',()=>{const r=calculateSystem(base);assert.equal(r.recommendedKw,4);assert.equal(r.monthlyGenerationUnits,480);assert.equal(r.indicativeMonthlySaving,3600);});
 test('never rounds capacity above available roof area',()=>{const r=calculateSystem({...base,roofAreaSqft:100});assert.equal(r.recommendedKw,1);assert.ok(r.areaNeededSqft<=100);assert.equal(r.areaLimited,true);});
 test('zero roof area cannot host capacity',()=>assert.equal(calculateSystem({...base,roofAreaSqft:0}).recommendedKw,0));
 test('derives consumption from bill when units absent',()=>{const r=calculateSystem({...base,monthlyUnits:null,monthlyBill:3600});assert.equal(r.targetMonthlyUnits,450);assert.equal(r.unitsDerivedFromBill,true);});
 test('rejects negative, infinite and zero-assumption inputs',()=>{assert.equal(calculateSystem({...base,monthlyUnits:Infinity}),null);assert.equal(calculateSystem({...base,monthlyUnits:-1}),null);assert.equal(calculateSystem({...base,assumptions:{...base.assumptions,unitsPerKwPerDay:0}}),null);});
-
+test('calculates PM Surya Ghar CFA in the published capacity slabs',()=>{assert.equal(calculatePmSuryaGharCfa(1),30000);assert.equal(calculatePmSuryaGharCfa(2),60000);assert.equal(calculatePmSuryaGharCfa(3),78000);assert.equal(calculatePmSuryaGharCfa(5),78000);assert.equal(calculatePmSuryaGharCfa(0),0);});
+test('calculates reducing-balance loan EMI and handles zero interest',()=>{assert.ok(calculateLoanEmi(200000,5.75,5)>3800&&calculateLoanEmi(200000,5.75,5)<3900);assert.equal(calculateLoanEmi(12000,0,1),1000);assert.equal(calculateLoanEmi(0,5.75,5),0);});
+test('uses the latest CEA weighted-average grid emissions factor',()=>assert.equal(INDIA_GRID_TCO2_PER_MWH,0.675));
