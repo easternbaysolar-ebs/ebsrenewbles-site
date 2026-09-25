@@ -1,3 +1,4 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { QuotePage } from "@/components/site/PublicPages";
-export const Route = createFileRoute("/application")({ component: QuotePage });
+import { ApplicationPage } from "@/components/site/ApplicationPage";
+export const Route = createFileRoute("/application")({ component: ApplicationPage });
+

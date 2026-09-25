@@ -89,6 +89,9 @@ export function SiteHeader() {
           <Button asChild size="sm" className="hidden md:inline-flex">
             <Link to="/quote">Get a Quote</Link>
           </Button>
+          <Button asChild variant="outline" size="sm" className="hidden lg:inline-flex">
+            <Link to="/application">Apply Now</Link>
+          </Button>
 
           <Sheet open={open} onOpenChange={setOpen}>
             <SheetTrigger asChild>
@@ -126,6 +129,9 @@ export function SiteHeader() {
                   ))}
                 </div>
                 <div className={cn("mt-3 flex flex-col gap-2 border-t border-border p-3")}>
+                  <Button asChild variant="outline" onClick={() => setOpen(false)}>
+                    <Link to="/application">Apply Now · PM Surya Ghar</Link>
+                  </Button>
                   <Button asChild onClick={() => setOpen(false)}>
                     <Link to="/quote">Get a Quote</Link>
                   </Button>
@@ -146,3 +152,4 @@ export function SiteHeader() {
     </header>
   );
 }
+

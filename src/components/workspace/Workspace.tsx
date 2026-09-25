@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, ArrowUpRight, Menu, X, Download, Sun } from "lucide-react";
+import { Plus, ArrowUpRight, Menu, X, Download, Sun, Trash2, MapPin } from "lucide-react";
 import { useMyRoles, useSession, APP_ROLES, ROLE_LABELS } from "@/lib/auth";
 import { db, safeUrl } from "@/lib/db";
 import { modules, type Field } from "@/lib/modules";
@@ -319,7 +319,8 @@ function Records({
     [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
     [role, setRole] = useState(""),
-    [note, setNote] = useState("");
+    [note, setNote] = useState(""),
+    [busyFile, setBusyFile] = useState<File | null>(null);
   const refs = useQuery({
     queryKey: ["work", "references"],
     queryFn: async () => {
@@ -348,7 +349,9 @@ function Records({
   });
   const editable = admin
     ? config.fields
-    : config.fields.filter((f) =>
+    : section === "leads" && record && !record["id"]
+      ? config.fields.filter((f) => f.key !== "assigned_to")
+      : config.fields.filter((f) =>
         section === "leads"
           ? ["status", "notes", "next_follow_up"].includes(f.key)
           : ["projects", "tasks"].includes(section)
@@ -408,6 +411,23 @@ function Records({
         validateContact(payload["value"]);
       if (config.table === "tasks" && payload["status"] === "completed")
         payload["completed_at"] = new Date().toISOString();
+      if (config.table === "leads" && !record["id"] && !admin) {
+        payload["assigned_to"] = userId;
+        payload["source"] = "employee";
+        payload["status"] = "new";
+      }
+      if (config.table === "tasks" && record["task_type"] === "site_visit") {
+        if (busyFile) {
+          const path = `${record["id"]}/${userId}/${crypto.randomUUID()}-${busyFile.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
+          const uploaded = await db.storage.from("site-visit-evidence").upload(path, busyFile);
+          if (uploaded.error) throw uploaded.error;
+          payload["visit_photo_path"] = path;
+        }
+        for (const key of ["visit_note", "visit_latitude", "visit_longitude"])
+          if (record[key] !== undefined) payload[key] = record[key];
+        if (payload["status"] === "completed" && (!(payload["visit_photo_path"] || record["visit_photo_path"]) || !record["visit_note"]?.trim() || record["visit_latitude"] == null || record["visit_longitude"] == null))
+          throw Error("Add a visit photo, location, and short note before completing this site visit.");
+      }
       if (!record["id"] && ["tasks", "quotations"].includes(config.table))
         payload["created_by"] = userId;
       if (!record["id"] && config.table === "quotations")
@@ -424,6 +444,7 @@ function Records({
         });
         if (result.error) throw result.error;
       }
+      setBusyFile(null);
       await cache.invalidateQueries();
       setRecord(null);
       toast.success("Saved successfully");
@@ -442,6 +463,11 @@ function Records({
       if (f.options) initial[f.key] = f.options[0];
     }
     if (section === "quotations") initial["quote_number"] = "EBR-" + Date.now();
+    if (section === "leads" && !admin) {
+      initial["assigned_to"] = userId;
+      initial["status"] = "new";
+      initial["customer_type"] = "residential";
+    }
     setError("");
     setRole("");
     setRecord(initial);
@@ -456,7 +482,7 @@ function Records({
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
-        {admin && section !== "history" && section !== "employees" && (
+        {(admin && section !== "history" && section !== "employees" || !admin && section === "leads") && (
           <Button onClick={create}>
             <Plus size={16} />
             Add {config["title"].toLowerCase()}
@@ -465,8 +491,7 @@ function Records({
       </div>
       {section === "employees" && (
         <p className="mb-6 text-sm text-muted-foreground">
-          Staff create an account through Team login → Request staff access, then confirm their
-          email. Approve them here by assigning a role. New accounts have no business access.
+          To add a team member, have them register through Team login → Request staff access and confirm their email, then approve them here by assigning a role. Remove access here when they leave; their work history is retained.
         </p>
       )}
       {q.isPending ? (
@@ -484,6 +509,7 @@ function Records({
                   </th>
                 ))}
                 <th className="p-4">Details</th>
+                {section === "employees" && admin && <th className="p-4">Access</th>}
               </tr>
             </thead>
             <tbody>
@@ -499,6 +525,7 @@ function Records({
                       className="underline"
                       onClick={() => {
                         setRecord({ ...r });
+                        setBusyFile(null);
                         setError("");
                         setRole("");
                       }}
@@ -506,6 +533,7 @@ function Records({
                       Open
                     </button>
                   </td>
+                  {section === "employees" && admin && <td className="p-4"><Button variant="outline" size="sm" disabled={r["id"] === userId || !r["is_active"]} onClick={async()=>{if(!window.confirm(`Remove workspace access for ${r["full_name"] || r["email"]}? Existing work records will be retained.`))return;const {error}=await db.rpc("remove_employee_access",{employee:r["id"]});if(error)toast.error(error.message);else{await cache.invalidateQueries();toast.success("Employee access removed");}}}><Trash2 size={14}/> Remove</Button></td>}
                 </tr>
               ))}
             </tbody>
@@ -564,6 +592,7 @@ function Records({
                   onChange={(v) => setRecord({ ...record, [f.key]: v })}
                 />
               ))}
+              {section === "tasks" && record["task_type"] === "site_visit" && record["id"] && <VisitEvidence record={record} readonly={readonly} onChange={setRecord} onFile={setBusyFile} />}
               {section === "history" && (
                 <dl>
                   {config.columns.map((k) => (
@@ -591,6 +620,7 @@ function Records({
                   </select>
                 </label>
               )}
+              {section === "employees" && admin && record["id"] !== userId && record["is_active"] && <Button type="button" variant="destructive" onClick={async()=>{if(!window.confirm(`Remove workspace access for ${record["full_name"] || record["email"]}? Existing work records will be retained.`))return;setBusy(true);const {error}=await db.rpc("remove_employee_access",{employee:record["id"]});setBusy(false);if(error)setError(error.message);else{await cache.invalidateQueries();setRecord(null);toast.success("Employee access removed");}}}><Trash2 size={16}/> Remove access</Button>}
               {error && <p role="alert">{error}</p>}
               {!readonly && <Button disabled={busy}>{busy ? "Saving…" : "Save changes"}</Button>}
               {section === "quotations" && record["id"] && (
@@ -644,6 +674,7 @@ function Records({
                       </Button>
                     </>
                   )}
+                  <ApplicationFiles leadId={record["id"]} />
                 </div>
               )}
             </form>
@@ -652,6 +683,22 @@ function Records({
       </Dialog>
     </>
   );
+}
+function VisitEvidence({record,readonly,onChange,onFile}:{record:Row;readonly:boolean;onChange:(r:Row)=>void;onFile:(f:File|null)=>void}) {
+  const [locating,setLocating]=useState(false);
+  const photo=record["visit_photo_path"] as string|undefined;
+  return <section className="space-y-4 border-t pt-6"><h3 className="font-semibold">Site visit evidence</h3><p className="text-sm text-muted-foreground">Capture a site photo, use this device’s location, and add a short reason or outcome. Evidence stays private with this task.</p>
+    <label className="block space-y-2 text-sm">Visit photo<input className="block w-full rounded border bg-background p-3" type="file" accept="image/jpeg,image/png,image/webp" capture="environment" disabled={readonly} onChange={(e)=>onFile(e.target.files?.[0]??null)}/></label>
+    {photo&&<p className="text-xs text-muted-foreground">Photo saved · <button type="button" className="underline" onClick={async()=>{const r=await db.storage.from("site-visit-evidence").createSignedUrl(photo,60);if(r.error)toast.error(r.error.message);else if(r.data)window.open(r.data.signedUrl,"_blank","noopener");}}>View private photo</button></p>}
+    <div className="flex flex-wrap items-center gap-4"><Button type="button" variant="outline" disabled={readonly||locating} onClick={()=>{if(!navigator.geolocation){toast.error("Location is unavailable in this browser.");return;}setLocating(true);navigator.geolocation.getCurrentPosition((p)=>{onChange({...record,visit_latitude:p.coords.latitude,visit_longitude:p.coords.longitude});setLocating(false);},()=>{toast.error("Could not get location. Allow location access and try again.");setLocating(false);},{enableHighAccuracy:true,timeout:15000});}}><MapPin size={16}/>{locating?"Getting location…":"Capture current location"}</Button><span className="text-sm text-muted-foreground">{record["visit_latitude"]!=null&&record["visit_longitude"]!=null?`${Number(record["visit_latitude"]).toFixed(5)}, ${Number(record["visit_longitude"]).toFixed(5)}`:"Location not captured"}</span></div>
+    <label className="block space-y-2 text-sm">Short reason / visit note<Textarea maxLength={500} disabled={readonly} value={record["visit_note"]??""} onChange={(e)=>onChange({...record,visit_note:e.target.value})} placeholder="Purpose of visit, site condition, or next action"/></label>
+  </section>;
+}
+function ApplicationFiles({leadId}:{leadId:string}) {
+  const app=useQuery({queryKey:["application",leadId],queryFn:async()=>{const {data,error}=await db.from("scheme_applications").select("*").eq("lead_id",leadId).maybeSingle();if(error)throw error;return data;}});
+  const files=useQuery({queryKey:["application-files",app.data?.id],enabled:!!app.data?.id,queryFn:async()=>{const {data,error}=await db.from("application_documents").select("*").eq("application_id",app.data!.id).order("created_at");if(error)throw error;return data??[];}});
+  if(!app.data)return null;
+  return <div className="mt-6 rounded border p-4"><h3 className="font-semibold">PM Surya Ghar documents</h3><p className="mt-2 text-sm text-muted-foreground">Consumer number {app.data.consumer_number} · {app.data.discom}, {app.data.state}</p>{files.data?.map((f)=> <div key={f.id} className="mt-3 flex flex-wrap justify-between gap-3 border-t pt-3 text-sm"><span className="capitalize">{f.document_type.replaceAll("_"," ")} · {f.file_name||"Typed details"}</span>{f.typed_details&&<p className="w-full text-muted-foreground">{f.typed_details}</p>}{f.storage_path&&<Button type="button" size="sm" variant="outline" onClick={async()=>{const r=await db.storage.from("customer-documents").createSignedUrl(f.storage_path!,60);if(r.error)toast.error(r.error.message);else if(r.data)window.open(r.data.signedUrl,"_blank","noopener");}}>Open secure file</Button>}</div>)}</div>;
 }
 function Editor({
   field: f,
@@ -1037,3 +1084,4 @@ function Uploads({ userId }: { userId: string }) {
     </div>
   );
 }
+
