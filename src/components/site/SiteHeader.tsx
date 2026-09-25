@@ -36,7 +36,7 @@ export function SiteHeader() {
 
   return (
     <header className="sticky top-0 z-50 border-b border-border bg-background/85 backdrop-blur-xl">
-      <div className="mx-auto flex h-16 w-full max-w-[1440px] items-center justify-between gap-4 px-5 sm:px-8">
+      <div className="mx-auto flex h-20 w-full max-w-[1440px] items-center justify-between gap-2 px-3 sm:h-24 sm:gap-4 sm:px-8">
         <Link to="/" className="shrink-0" aria-label="Easternbay Renewables home">
           <Logo />
         </Link>
