@@ -3,10 +3,10 @@ import { cn } from "@/lib/utils";
 export function Logo({ className, compact = false }: { className?: string; compact?: boolean }) {
   return (
     <span
-      className={cn("inline-flex items-center gap-2.5", className)}
+      className={cn("inline-flex items-center gap-1", className)}
       aria-label={compact ? "Easternbay Renewables" : undefined}
     >
-      <span aria-hidden className="relative size-8 shrink-0 overflow-hidden rounded-sm">
+      <span aria-hidden className="relative size-16 shrink-0 overflow-hidden rounded-sm">
         <img
           src="/brand/easternbay-logo-transparent.png"
           alt=""
