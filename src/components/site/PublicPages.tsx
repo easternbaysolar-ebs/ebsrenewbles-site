@@ -273,33 +273,44 @@ export function SolutionsPage({ sector }: { sector?: string }) {
   );
 }
 export function CalculatorPage() {
-  const [units, setUnits] = useState(450),
-    [bill, setBill] = useState(0),
-    [area, setArea] = useState(500),
-    [sector, setSector] = useState<PropertyType>("residential"),
-    [tariff, setTariff] = useState(8),
-    [yieldDay, setYield] = useState(4),
-    [cost, setCost] = useState(60000),
-    [loan, setLoan] = useState(200000),
-    [rate, setRate] = useState(9),
-    [years, setYears] = useState(5);
+  const [bill, setBill] = useState(4500);
+  const [roofArea, setRoofArea] = useState("");
+  const [location, setLocation] = useState("andhra");
+  const [usage, setUsage] = useState("medium");
+  const [sector, setSector] = useState<PropertyType>("residential");
+  const [tariff, setTariff] = useState(8);
+  const [cost, setCost] = useState(60000);
   const settings = useQuery(calculatorAssumptionsQuery);
+  const locations = {
+    andhra: { name: "Andhra Pradesh", sunshine: 5.2, yield: 5.2 },
+    telangana: { name: "Telangana", sunshine: 5.1, yield: 5.1 },
+    tamilnadu: { name: "Tamil Nadu", sunshine: 4.9, yield: 4.9 },
+    karnataka: { name: "Karnataka", sunshine: 5, yield: 5 },
+  } as const;
+  const usageLevels = {
+    low: { label: "Low", detail: "Lights, fans and basic appliances", factor: 0.8 },
+    medium: { label: "Medium", detail: "Refrigerator, washing machine or one AC", factor: 1 },
+    high: { label: "High", detail: "Multiple ACs, geyser or heavier daily use", factor: 1.3 },
+  } as const;
+  const selectedLocation = locations[location as keyof typeof locations];
+  const selectedUsage = usageLevels[usage as keyof typeof usageLevels];
   const assumptions = {
     ...DEFAULT_ASSUMPTIONS[sector],
     tariffPerUnit: tariff,
-    unitsPerKwPerDay: yieldDay,
+    unitsPerKwPerDay: selectedLocation.yield,
     costPerKw: cost,
   };
+  const monthlyUnits = (bill / tariff) * selectedUsage.factor;
+  const roofSqft = roofArea.trim() ? Number(roofArea) * 10.7639 : null;
   const valid =
-    [tariff, yieldDay, cost, area].every((n) => Number.isFinite(n) && n > 0) &&
-    units >= 0 &&
-    bill >= 0;
+    [tariff, cost, bill, selectedLocation.yield].every((n) => Number.isFinite(n) && n > 0) &&
+    bill >= 500 &&
+    (!roofArea.trim() || (Number.isFinite(Number(roofArea)) && Number(roofArea) > 0));
   const result = valid
     ? calculateSystem({
         propertyType: sector,
-        monthlyUnits: units,
-        monthlyBill: bill,
-        roofAreaSqft: area,
+        monthlyUnits,
+        roofAreaSqft: roofSqft,
         assumptions,
       })
     : null;
@@ -309,127 +320,222 @@ export function CalculatorPage() {
       currency: "INR",
       maximumFractionDigits: 0,
     }).format(n);
-  const months = years * 12,
-    r = rate / 1200;
-  const emi =
-    loan >= 0 && years > 0 && rate >= 0
-      ? r
-        ? (loan * r) / (1 - Math.pow(1 + r, -months))
-        : loan / months
-      : 0;
-  function number(label: string, value: number, set: (n: number) => void, min = 0) {
+  const monthlySavings = result ? Math.min(result.indicativeMonthlySaving, bill) : 0;
+  const annualSavings = monthlySavings * 12;
+  const paybackYears =
+    result && annualSavings > 0 ? result.indicativeSystemCost / annualSavings : null;
+  function number(label: string, value: number, set: (n: number) => void, min = 0, hint?: string) {
     return (
-      <label className="block space-y-2 text-sm">
-        {label}
+      <div className="space-y-2">
+        <label className="block text-sm font-medium" htmlFor={label.replace(/[^a-z0-9]/gi, "-")}>
+          {label}
+        </label>
         <Input
+          id={label.replace(/[^a-z0-9]/gi, "-")}
           type="number"
           min={min}
           step="any"
           value={value}
           onChange={(e) => set(Number(e.target.value))}
         />
-      </label>
+        {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
+      </div>
     );
   }
   return (
     <Page
-      title="What could your roof generate?"
-      subtitle="Start with your monthly consumption. Adjust the assumptions to explore an indicative system; a site survey confirms the design."
+      title="Solar Energy Calculator"
+      subtitle={`Explore a solar system estimate for ${selectedLocation.name}. Enter your average bill and roof details to see a starting point for your project.`}
     >
-      <div className="grid gap-8 lg:grid-cols-2">
-        <div className="panel space-y-6 p-8">
-          <label className="block text-sm">
-            Property type
+      <div className="grid items-start gap-8 lg:grid-cols-2">
+        <section
+          className="panel space-y-7 p-6 sm:p-8"
+          aria-labelledby="calculator-details-heading"
+        >
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+              Personalised estimate
+            </p>
+            <h2 id="calculator-details-heading" className="mt-2 text-2xl font-semibold">
+              Enter your details
+            </h2>
+            <p className="mt-2 text-sm text-muted-foreground">
+              A few details help us size a system for your property. Appliance use adjusts the
+              sizing estimate; savings stay within your current bill.
+            </p>
+          </div>
+          {number(
+            "Average monthly electricity bill (₹)",
+            bill,
+            setBill,
+            500,
+            "Enter the amount from a typical electricity bill.",
+          )}
+          <div className="space-y-2">
+            <label className="block text-sm font-medium" htmlFor="roof-area">
+              Available roof area (sq metres){" "}
+              <span className="font-normal text-muted-foreground">Optional</span>
+            </label>
+            <Input
+              id="roof-area"
+              type="number"
+              min="1"
+              step="any"
+              placeholder="e.g. 50"
+              value={roofArea}
+              onChange={(e) => setRoofArea(e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">
+              We’ll account for roof space when suggesting your system size.
+            </p>
+          </div>
+          <div className="space-y-2">
+            <label className="block text-sm font-medium" htmlFor="solar-location">
+              Select location / state
+            </label>
             <select
-              className="mt-2 w-full rounded border bg-background p-3"
-              value={sector}
-              onChange={(e) => setSector(e.target.value as PropertyType)}
+              id="solar-location"
+              className="w-full rounded border bg-background p-3"
+              value={location}
+              onChange={(e) => setLocation(e.target.value)}
             >
-              {Object.keys(DEFAULT_ASSUMPTIONS).map((x) => (
-                <option key={x}>{x}</option>
+              {Object.entries(locations).map(([key, item]) => (
+                <option key={key} value={key}>
+                  {item.name}
+                </option>
               ))}
             </select>
-          </label>
-          <div className="grid gap-5 sm:grid-cols-2">
-            {number("Monthly electricity use (kWh)", units, setUnits)}
-            {number("Or monthly bill (₹)", bill, setBill)}
-            {number("Shade-free roof area (sq ft)", area, setArea, 1)}
-            {number("Electricity tariff (₹/kWh)", tariff, setTariff, 0.1)}
-            {number("Generation (kWh/kW/day)", yieldDay, setYield, 0.1)}
-            {number("Indicative cost (₹/kW)", cost, setCost, 1)}
+            <p className="text-xs text-muted-foreground">
+              Typical sunshine: {selectedLocation.sunshine.toFixed(1)} hours per day.
+            </p>
           </div>
-          <p className="text-sm text-muted-foreground">
-            Consumption takes priority when both units and bill are entered. Estimates exclude
-            subsidies, financing, maintenance and export-tariff differences.
-          </p>
-          {settings.data && (
-            <Button
-              variant="outline"
-              onClick={() => {
-                setYield(settings.data!["units_per_kw_per_day"] ?? 4);
-                setCost(settings.data!["cost_per_kw"] ?? 60000);
-                setTariff(settings.data!["tariff_per_unit"] ?? 8);
-              }}
-            >
-              Use company assumptions
-            </Button>
-          )}
-        </div>
-        <div className="bg-foreground p-8 text-background" aria-live="polite">
-          <p className="text-sm uppercase tracking-widest">Your indicative system</p>
+          <fieldset className="space-y-3">
+            <legend className="text-sm font-medium">Appliance usage level</legend>
+            <div className="grid gap-3 sm:grid-cols-3">
+              {Object.entries(usageLevels).map(([key, item]) => (
+                <label
+                  key={key}
+                  className={`cursor-pointer rounded border p-3 transition-colors focus-within:ring-2 focus-within:ring-ring ${usage === key ? "border-foreground bg-muted" : "hover:bg-muted/50"}`}
+                >
+                  <input
+                    className="sr-only"
+                    type="radio"
+                    name="appliance-usage"
+                    value={key}
+                    checked={usage === key}
+                    onChange={() => setUsage(key)}
+                  />
+                  <span className="block text-sm font-semibold">{item.label}</span>
+                  <span className="mt-1 block text-xs leading-relaxed text-muted-foreground">
+                    {item.detail}
+                  </span>
+                </label>
+              ))}
+            </div>
+          </fieldset>
+          <div className="space-y-5 border-t pt-5">
+            <h3 className="text-sm font-semibold">System preferences</h3>
+            <div className="grid gap-5 sm:grid-cols-3">
+              <label className="block space-y-2 text-sm">
+                Property type
+                <select
+                  className="w-full rounded border bg-background p-3"
+                  value={sector}
+                  onChange={(e) => setSector(e.target.value as PropertyType)}
+                >
+                  {Object.keys(DEFAULT_ASSUMPTIONS).map((x) => (
+                    <option key={x} value={x}>
+                      {x.slice(0, 1).toUpperCase() + x.slice(1)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              {number("Electricity tariff (₹/unit)", tariff, setTariff, 0.1)}
+              {number("Indicative system cost (₹/kW)", cost, setCost, 1)}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Cost assumptions can be updated by Easternbay. Estimates exclude applicable subsidies,
+              financing, maintenance and export-tariff differences.
+            </p>
+            {settings.data && (
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setCost(settings.data!["cost_per_kw"] ?? 60000);
+                  setTariff(settings.data!["tariff_per_unit"] ?? 8);
+                }}
+              >
+                Use company assumptions
+              </Button>
+            )}
+          </div>
+        </section>
+        <section
+          className="bg-foreground p-6 text-background sm:p-8"
+          aria-live="polite"
+          aria-label="Solar estimate results"
+        >
+          <p className="text-xs uppercase tracking-[0.18em] opacity-70">Your solar solution</p>
+          <h2 className="mt-2 text-2xl font-semibold">Recommended system</h2>
           {result ? (
             <>
-              <p className="my-8 text-7xl font-medium tracking-tight">
+              <p className="my-6 text-6xl font-medium tracking-tight sm:text-7xl">
                 {result.recommendedKw}
                 <span className="ml-3 text-2xl">kW</span>
               </p>
-              <dl className="grid grid-cols-2 gap-8">
+              <p className="mb-8 text-sm opacity-70">
+                Based on your bill and {selectedLocation.name} sunshine estimate.
+              </p>
+              <h3 className="border-b border-background/20 pb-3 text-sm font-semibold">
+                Investment & generation
+              </h3>
+              <dl className="mt-5 grid grid-cols-2 gap-x-6 gap-y-6">
                 {[
-                  ["Monthly generation", result.monthlyGenerationUnits + " kWh"],
-                  ["Estimated investment", money(result.indicativeSystemCost)],
-                  ["Monthly bill offset", money(result.indicativeMonthlySaving)],
-                  ["Panels", result.panelCount],
-                  ["Roof space", result.areaNeededSqft + " sq ft"],
+                  ["Estimated system cost", money(result.indicativeSystemCost)],
                   [
-                    "Simple payback",
-                    result.simplePaybackYears ? result.simplePaybackYears + " years" : "—",
+                    "Estimated monthly generation",
+                    `${result.monthlyGenerationUnits.toLocaleString("en-IN")} units`,
                   ],
+                  ["Estimated annual bill savings", money(annualSavings)],
+                  [
+                    "Simple payback estimate",
+                    paybackYears ? `${(Math.round(paybackYears * 10) / 10).toFixed(1)} years` : "—",
+                  ],
+                  ["Approximate panels", result.panelCount],
+                  ["Roof area needed", `${(result.areaNeededSqft / 10.7639).toFixed(1)} sq metres`],
                 ].map(([k, v]) => (
                   <div key={k}>
-                    <dt className="text-sm opacity-65">{k}</dt>
-                    <dd className="mt-2 text-xl">{v}</dd>
+                    <dt className="text-xs opacity-65">{k}</dt>
+                    <dd className="mt-2 text-lg font-medium">{v}</dd>
                   </div>
                 ))}
               </dl>
               {result.areaLimited && (
-                <p className="mt-6">Your available roof limits the system size.</p>
+                <p className="mt-6 rounded border border-background/30 p-3 text-sm">
+                  Your available roof area limits the system size; a site survey can confirm usable
+                  space.
+                </p>
               )}
-              <a href="/quote" className="mt-10 inline-block border border-current px-6 py-3">
+              <p className="mt-7 border-t border-background/20 pt-5 text-xs leading-relaxed opacity-70">
+                Subsidy eligibility and amounts depend on the current scheme, system type and
+                approval. This estimate does not include a subsidy. Final design, pricing and
+                savings are confirmed after assessment.
+              </p>
+              <a
+                href="/quote"
+                className="mt-7 inline-block border border-current px-6 py-3 text-sm font-medium hover:bg-background hover:text-foreground"
+              >
                 Request a detailed quote ↗
               </a>
             </>
           ) : (
-            <p className="mt-12">
-              Enter positive consumption and valid assumptions to calculate a system.
+            <p className="mt-8">
+              Enter a monthly bill of at least ₹500 and valid assumptions to see your estimate.
             </p>
           )}
-        </div>
-      </div>
-      <div className="panel mt-12 p-8">
-        <h2 className="text-2xl font-semibold">Explore monthly financing</h2>
-        <div className="mt-6 grid gap-6 md:grid-cols-4">
-          {number("Loan amount (₹)", loan, setLoan)}
-          {number("Annual interest (%)", rate, setRate)}
-          {number("Term (years)", years, setYears, 1)}
-          <div>
-            <p className="text-sm">Illustrative monthly EMI</p>
-            <p className="mt-4 text-3xl">{money(emi)}</p>
-          </div>
-        </div>
-        <p className="mt-5 text-sm text-muted-foreground">
-          A mathematical estimate only. Actual lender rates, eligibility, fees and terms vary.
-        </p>
+        </section>
       </div>
     </Page>
   );
 }
+
