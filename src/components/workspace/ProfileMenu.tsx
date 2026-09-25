@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { UserCircle, LogOut } from "lucide-react";
 import { useMyProfile, useSignOut } from "@/lib/auth";
+import { profileName } from "@/lib/profile";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -24,7 +25,7 @@ export function ProfileMenu({ admin }: { admin: boolean }) {
   const signOut = useSignOut();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
-  const name = profile.data?.full_name?.trim() || "Team member";
+  const name = profileName(profile.data?.full_name, admin);
   const code = profile.data?.employee_code || (admin ? "Admin" : "ID pending");
   return (
     <>

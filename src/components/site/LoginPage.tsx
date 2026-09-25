@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Page } from "./PublicPages";
 import { useMyProfile, useMyRoles, useSession } from "@/lib/auth";
+import { profileName } from "@/lib/profile";
 import { db } from "@/lib/db";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -63,9 +64,9 @@ export function LoginPage() {
         {user && mode !== "password" ? (
           <>
             <div className="mb-6">
-              <p className="font-medium">{profile.data?.full_name || user.email}</p>
+              <p className="font-medium">{profileName(profile.data?.full_name, isAdmin)}</p>
               <p className="text-sm text-muted-foreground">
-                {profile.data?.employee_code || user.email}
+                {profile.data?.employee_code || (isAdmin ? "Admin" : "ID pending")}
               </p>
             </div>
             {isStaff ? (

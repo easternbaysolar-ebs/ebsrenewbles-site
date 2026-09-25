@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import { useMyProfile, useMyRoles, useSession } from "@/lib/auth";
+import { profileName } from "@/lib/profile";
 
 const NAV = [
   { to: "/", label: "Home" },
@@ -31,7 +32,7 @@ export function SiteHeader() {
   const { isAdmin, isStaff } = useMyRoles();
   const profile = useMyProfile();
   const accountRoute = isAdmin ? "/admin" : isStaff ? "/employee" : "/auth";
-  const accountLabel = user ? profile.data?.full_name || "My account" : "Login";
+  const accountLabel = user ? profileName(profile.data?.full_name, isAdmin) : "Login";
 
   return (
     <header className="sticky top-0 z-50 border-b border-border bg-background/85 backdrop-blur-xl">
