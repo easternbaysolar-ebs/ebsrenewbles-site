@@ -273,7 +273,7 @@ export function SolutionsPage({ sector }: { sector?: string }) {
   );
 }
 export function CalculatorPage() {
-  const [bill, setBill] = useState(4500);
+  const [bill, setBill] = useState(0);
   const [roofArea, setRoofArea] = useState("");
   const [location, setLocation] = useState("andhra");
   const [usage, setUsage] = useState("medium");
@@ -335,7 +335,7 @@ export function CalculatorPage() {
           type="number"
           min={min}
           step="any"
-          value={value}
+          value={value || ""}
           onChange={(e) => set(Number(e.target.value))}
         />
         {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
