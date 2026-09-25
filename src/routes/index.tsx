@@ -108,7 +108,7 @@ function HomePage() {
           />
         </div>
         <div aria-hidden className="grid-lines pointer-events-none absolute inset-0 hidden opacity-70 dark:block" />
-        <div className="relative mx-auto w-full max-w-6xl px-5 py-20 sm:px-8 md:py-32">
+        <div data-scroll-reveal className="relative mx-auto w-full max-w-6xl px-5 py-20 sm:px-8 md:py-32">
           <div className="grid gap-14 lg:grid-cols-[1.1fr_0.9fr] lg:items-center">
             <div className="rise-in">
               <p className="eyebrow">Solar EPC · India</p>
