@@ -16,6 +16,7 @@ export function Section({
   return (
     <section
       id={id}
+      data-scroll-reveal
       className={cn(
         "px-5 py-20 sm:px-8 md:py-28",
         bordered && "border-t border-border",
