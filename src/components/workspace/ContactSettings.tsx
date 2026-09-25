@@ -16,7 +16,11 @@ export function ContactSettings() {
   if (!roles.isAdmin) return <p>Administrator access required.</p>;
   if (query.isPending) return <p>Loading contact settings…</p>;
   if (query.error) return <p role="alert">Could not load contact settings. Please try again.</p>;
-  const values = draft ?? query.data?.value ?? {};
+  const saved = query.data?.value ?? {};
+  const values = draft ?? {
+    ...saved,
+    ...Object.fromEntries(contactFields.map(([key]) => [key, contactText(saved[key])])),
+  };
   return (
     <form
       className="panel max-w-3xl space-y-6 p-6"
@@ -62,7 +66,7 @@ export function ContactSettings() {
           <label key={key} className="space-y-2 text-sm">
             <span>{label}</span>
             <Input
-              value={draft && typeof values[key] === "string" ? String(values[key]) : contactText(values[key])}
+              value={typeof values[key] === "string" ? String(values[key]) : ""}
               maxLength={500}
               disabled={busy}
               type={label.endsWith("URL") ? "url" : key === "email" ? "email" : "text"}
@@ -77,3 +81,4 @@ export function ContactSettings() {
     </form>
   );
 }
+
