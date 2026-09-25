@@ -64,7 +64,16 @@ export function ProductsPage() {
               const Icon = [Sun, Zap, Battery, Layers][i % 4]!;
               return (
                 <article className="panel p-8" key={p.id}>
-                  <Icon className="mb-8 size-8" />
+                  {p.image_url ? (
+                    <img
+                      src={p.image_url}
+                      alt={p.name}
+                      className="mb-6 aspect-[16/10] w-full rounded object-cover"
+                      loading="lazy"
+                    />
+                  ) : (
+                    <Icon className="mb-8 size-8" />
+                  )}
                   <p className="eyebrow">{p.category}</p>
                   <h2 className="mt-3 text-xl font-semibold">{p.name}</h2>
                   <p className="my-4 text-muted-foreground">{p.description}</p>

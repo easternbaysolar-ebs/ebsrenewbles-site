@@ -152,4 +152,3 @@ export function SiteHeader() {
     </header>
   );
 }
-

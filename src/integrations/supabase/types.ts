@@ -393,7 +393,10 @@ export type Database = {
       }
       quotations: {
         Row: {
+          bank_details: string | null
           capacity_kw: number | null
+          company_address: string | null
+          company_gst_number: string | null
           created_at: string
           created_by: string | null
           customer_id: string | null
@@ -411,7 +414,10 @@ export type Database = {
           valid_until: string | null
         }
         Insert: {
+          bank_details?: string | null
           capacity_kw?: number | null
+          company_address?: string | null
+          company_gst_number?: string | null
           created_at?: string
           created_by?: string | null
           customer_id?: string | null
@@ -429,7 +435,10 @@ export type Database = {
           valid_until?: string | null
         }
         Update: {
+          bank_details?: string | null
           capacity_kw?: number | null
+          company_address?: string | null
+          company_gst_number?: string | null
           created_at?: string
           created_by?: string | null
           customer_id?: string | null

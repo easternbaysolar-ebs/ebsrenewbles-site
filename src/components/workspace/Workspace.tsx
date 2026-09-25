@@ -1,6 +1,20 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, ArrowUpRight, Menu, X, Download, Sun, Trash2, MapPin } from "lucide-react";
+import {
+  Plus,
+  ArrowUpRight,
+  Menu,
+  X,
+  Download,
+  Sun,
+  Trash2,
+  MapPin,
+  ArrowUp,
+  ArrowDown,
+  ImagePlus,
+  Share2,
+  Eye,
+} from "lucide-react";
 import { useMyRoles, useSession, APP_ROLES, ROLE_LABELS } from "@/lib/auth";
 import { db, safeUrl } from "@/lib/db";
 import { modules, type Field } from "@/lib/modules";
@@ -352,12 +366,12 @@ function Records({
     : section === "leads" && record && !record["id"]
       ? config.fields.filter((f) => f.key !== "assigned_to")
       : config.fields.filter((f) =>
-        section === "leads"
-          ? ["status", "notes", "next_follow_up"].includes(f.key)
-          : ["projects", "tasks"].includes(section)
-            ? f.key === "status"
-            : false,
-      );
+          section === "leads"
+            ? ["status", "notes", "next_follow_up"].includes(f.key)
+            : ["projects", "tasks"].includes(section)
+              ? f.key === "status"
+              : false,
+        );
   const readonly = section === "history" || (!admin && (!canWrite || !editable.length));
   const rows = (q.data ?? []).filter((r) =>
     config.columns.some((k) =>
@@ -366,6 +380,43 @@ function Records({
         .includes(search.toLowerCase()),
     ),
   );
+  async function removeRow(row: Row) {
+    const label = row[config.label] || row["id"];
+    if (
+      !window.confirm(
+        `Permanently remove ${config.title.slice(0, -1).toLowerCase()} “${label}”? This cannot be undone.`,
+      )
+    )
+      return;
+    const { error } = await db.from(config.table).delete().eq("id", row["id"]);
+    if (error) {
+      toast.error(
+        error.message.includes("foreign key")
+          ? "This record is linked to other records. Remove or reassign those links first."
+          : error.message,
+      );
+      return;
+    }
+    await cache.invalidateQueries();
+    if (record?.["id"] === row["id"]) setRecord(null);
+    toast.success(`${config.title.slice(0, -1)} removed`);
+  }
+  async function moveProduct(row: Row, direction: -1 | 1) {
+    const ordered = [...rows].sort(
+      (a, b) => Number(a["sort_order"] ?? 0) - Number(b["sort_order"] ?? 0),
+    );
+    const index = ordered.findIndex((item) => item["id"] === row["id"]);
+    const other = ordered[index + direction];
+    if (!other) return;
+    const currentOrder = Number(row["sort_order"] ?? index);
+    const otherOrder = Number(other["sort_order"] ?? index + direction);
+    const [first, second] = await Promise.all([
+      db.from("products").update({ sort_order: otherOrder }).eq("id", row["id"]),
+      db.from("products").update({ sort_order: currentOrder }).eq("id", other["id"]),
+    ]);
+    if (first.error || second.error) toast.error(first.error?.message || second.error?.message);
+    else await cache.invalidateQueries({ queryKey: ["work", "products"] });
+  }
   const label = (table: string, id: unknown) => {
     const r = refs.data?.[table]?.find((x) => x["id"] === id);
     return r?.["full_name"] || r?.["email"] || r?.["name"] || r?.["title"] || id || "—";
@@ -425,8 +476,16 @@ function Records({
         }
         for (const key of ["visit_note", "visit_latitude", "visit_longitude"])
           if (record[key] !== undefined) payload[key] = record[key];
-        if (payload["status"] === "completed" && (!(payload["visit_photo_path"] || record["visit_photo_path"]) || !record["visit_note"]?.trim() || record["visit_latitude"] == null || record["visit_longitude"] == null))
-          throw Error("Add a visit photo, location, and short note before completing this site visit.");
+        if (
+          payload["status"] === "completed" &&
+          (!(payload["visit_photo_path"] || record["visit_photo_path"]) ||
+            !record["visit_note"]?.trim() ||
+            record["visit_latitude"] == null ||
+            record["visit_longitude"] == null)
+        )
+          throw Error(
+            "Add a visit photo, location, and short note before completing this site visit.",
+          );
       }
       if (!record["id"] && ["tasks", "quotations"].includes(config.table))
         payload["created_by"] = userId;
@@ -462,7 +521,14 @@ function Records({
       if (f.type === "lines") initial[f.key] = [];
       if (f.options) initial[f.key] = f.options[0];
     }
-    if (section === "quotations") initial["quote_number"] = "EBR-" + Date.now();
+    if (section === "quotations") {
+      initial["quote_number"] = "EBR-" + Date.now();
+      initial["company_gst_number"] = "37EXFPR0556E1ZC";
+      initial["company_address"] =
+        "1-128/11, Near Hanuman Statue, Rajugari Beedu, Payakaraopeta, Anakapalli, Andhra Pradesh, 531126";
+      initial["bank_details"] =
+        "Bank: State Bank of India\nAccount Holder: EASTERNBAY SOLAR\nAccount #: 45338592498\nIFSC Code: SBIN0003064\nBranch: ADB TUNI";
+    }
     if (section === "leads" && !admin) {
       initial["assigned_to"] = userId;
       initial["status"] = "new";
@@ -482,7 +548,8 @@ function Records({
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
-        {(admin && section !== "history" && section !== "employees" || !admin && section === "leads") && (
+        {((admin && section !== "history" && section !== "employees") ||
+          (!admin && section === "leads")) && (
           <Button onClick={create}>
             <Plus size={16} />
             Add {config["title"].toLowerCase()}
@@ -491,7 +558,9 @@ function Records({
       </div>
       {section === "employees" && (
         <p className="mb-6 text-sm text-muted-foreground">
-          To add a team member, have them register through Team login → Request staff access and confirm their email, then approve them here by assigning a role. Remove access here when they leave; their work history is retained.
+          To add a team member, have them register through Team login → Request staff access and
+          confirm their email, then approve them here by assigning a role. Remove access here when
+          they leave; their work history is retained.
         </p>
       )}
       {q.isPending ? (
@@ -509,6 +578,9 @@ function Records({
                   </th>
                 ))}
                 <th className="p-4">Details</th>
+                {admin && ["leads", "customers", "products", "quotations"].includes(section) && (
+                  <th className="p-4">Manage</th>
+                )}
                 {section === "employees" && admin && <th className="p-4">Access</th>}
               </tr>
             </thead>
@@ -533,7 +605,86 @@ function Records({
                       Open
                     </button>
                   </td>
-                  {section === "employees" && admin && <td className="p-4"><Button variant="outline" size="sm" disabled={r["id"] === userId || !r["is_active"]} onClick={async()=>{if(!window.confirm(`Remove workspace access for ${r["full_name"] || r["email"]}? Existing work records will be retained.`))return;const {error}=await db.rpc("remove_employee_access",{employee:r["id"]});if(error)toast.error(error.message);else{await cache.invalidateQueries();toast.success("Employee access removed");}}}><Trash2 size={14}/> Remove</Button></td>}
+                  {admin && ["leads", "customers", "products", "quotations"].includes(section) && (
+                    <td className="p-3">
+                      <div className="flex items-center gap-2">
+                        {section === "products" && (
+                          <>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="icon"
+                              aria-label={`Move ${r["name"]} up`}
+                              disabled={
+                                rows
+                                  .sort(
+                                    (a, b) =>
+                                      Number(a["sort_order"] ?? 0) - Number(b["sort_order"] ?? 0),
+                                  )
+                                  .findIndex((x) => x["id"] === r["id"]) === 0
+                              }
+                              onClick={() => moveProduct(r, -1)}
+                            >
+                              <ArrowUp size={14} />
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="icon"
+                              aria-label={`Move ${r["name"]} down`}
+                              disabled={
+                                rows
+                                  .sort(
+                                    (a, b) =>
+                                      Number(a["sort_order"] ?? 0) - Number(b["sort_order"] ?? 0),
+                                  )
+                                  .findIndex((x) => x["id"] === r["id"]) ===
+                                rows.length - 1
+                              }
+                              onClick={() => moveProduct(r, 1)}
+                            >
+                              <ArrowDown size={14} />
+                            </Button>
+                          </>
+                        )}
+                        <Button
+                          type="button"
+                          variant="destructive"
+                          size="sm"
+                          onClick={() => removeRow(r)}
+                        >
+                          <Trash2 size={14} /> Delete
+                        </Button>
+                      </div>
+                    </td>
+                  )}
+                  {section === "employees" && admin && (
+                    <td className="p-4">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={r["id"] === userId || !r["is_active"]}
+                        onClick={async () => {
+                          if (
+                            !window.confirm(
+                              `Remove workspace access for ${r["full_name"] || r["email"]}? Existing work records will be retained.`,
+                            )
+                          )
+                            return;
+                          const { error } = await db.rpc("remove_employee_access", {
+                            employee: r["id"],
+                          });
+                          if (error) toast.error(error.message);
+                          else {
+                            await cache.invalidateQueries();
+                            toast.success("Employee access removed");
+                          }
+                        }}
+                      >
+                        <Trash2 size={14} /> Remove
+                      </Button>
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
@@ -592,7 +743,21 @@ function Records({
                   onChange={(v) => setRecord({ ...record, [f.key]: v })}
                 />
               ))}
-              {section === "tasks" && record["task_type"] === "site_visit" && record["id"] && <VisitEvidence record={record} readonly={readonly} onChange={setRecord} onFile={setBusyFile} />}
+              {section === "products" && admin && !readonly && (
+                <ProductImageEditor
+                  userId={userId}
+                  value={record["image_url"] || ""}
+                  onChange={(url) => setRecord({ ...record, image_url: url })}
+                />
+              )}
+              {section === "tasks" && record["task_type"] === "site_visit" && record["id"] && (
+                <VisitEvidence
+                  record={record}
+                  readonly={readonly}
+                  onChange={setRecord}
+                  onFile={setBusyFile}
+                />
+              )}
               {section === "history" && (
                 <dl>
                   {config.columns.map((k) => (
@@ -620,17 +785,81 @@ function Records({
                   </select>
                 </label>
               )}
-              {section === "employees" && admin && record["id"] !== userId && record["is_active"] && <Button type="button" variant="destructive" onClick={async()=>{if(!window.confirm(`Remove workspace access for ${record["full_name"] || record["email"]}? Existing work records will be retained.`))return;setBusy(true);const {error}=await db.rpc("remove_employee_access",{employee:record["id"]});setBusy(false);if(error)setError(error.message);else{await cache.invalidateQueries();setRecord(null);toast.success("Employee access removed");}}}><Trash2 size={16}/> Remove access</Button>}
+              {section === "employees" &&
+                admin &&
+                record["id"] !== userId &&
+                record["is_active"] && (
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    onClick={async () => {
+                      if (
+                        !window.confirm(
+                          `Remove workspace access for ${record["full_name"] || record["email"]}? Existing work records will be retained.`,
+                        )
+                      )
+                        return;
+                      setBusy(true);
+                      const { error } = await db.rpc("remove_employee_access", {
+                        employee: record["id"],
+                      });
+                      setBusy(false);
+                      if (error) setError(error.message);
+                      else {
+                        await cache.invalidateQueries();
+                        setRecord(null);
+                        toast.success("Employee access removed");
+                      }
+                    }}
+                  >
+                    <Trash2 size={16} /> Remove access
+                  </Button>
+                )}
               {error && <p role="alert">{error}</p>}
               {!readonly && <Button disabled={busy}>{busy ? "Saving…" : "Save changes"}</Button>}
               {section === "quotations" && record["id"] && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => printQuote(record, refs.data ?? {})}
-                >
-                  Print quotation
-                </Button>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => printQuote(record, refs.data ?? {}, false)}
+                  >
+                    <Eye size={16} /> Preview
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => printQuote(record, refs.data ?? {}, true)}
+                  >
+                    <Download size={16} /> Download PDF
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => shareQuote(record, refs.data ?? {}, "whatsapp")}
+                  >
+                    <Share2 size={16} /> WhatsApp
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => shareQuote(record, refs.data ?? {}, "email")}
+                  >
+                    <Share2 size={16} /> Email
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => shareQuote(record, refs.data ?? {}, "copy")}
+                  >
+                    <Share2 size={16} /> Copy details
+                  </Button>
+                  {admin && (
+                    <Button type="button" variant="destructive" onClick={() => removeRow(record)}>
+                      <Trash2 size={16} /> Delete quotation
+                    </Button>
+                  )}
+                </div>
               )}
               {section === "leads" && record["id"] && (
                 <div className="border-t pt-6">
@@ -684,25 +913,319 @@ function Records({
     </>
   );
 }
-function VisitEvidence({record,readonly,onChange,onFile}:{record:Row;readonly:boolean;onChange:(r:Row)=>void;onFile:(f:File|null)=>void}) {
-  const [locating,setLocating]=useState(false);
-  const photo=record["visit_photo_path"] as string|undefined;
-  return <section className="space-y-4 border-t pt-6"><h3 className="font-semibold">Site visit evidence</h3><p className="text-sm text-muted-foreground">Capture a site photo, use this device’s location, and add a short reason or outcome. Evidence stays private with this task.</p>
-    <label className="block space-y-2 text-sm">Visit photo<input className="block w-full rounded border bg-background p-3" type="file" accept="image/jpeg,image/png,image/webp" capture="environment" disabled={readonly} onChange={(e)=>onFile(e.target.files?.[0]??null)}/></label>
-    {photo&&<p className="text-xs text-muted-foreground">Photo saved · <button type="button" className="underline" onClick={async()=>{const r=await db.storage.from("site-visit-evidence").createSignedUrl(photo,60);if(r.error)toast.error(r.error.message);else if(r.data)window.open(r.data.signedUrl,"_blank","noopener");}}>View private photo</button></p>}
-    <div className="flex flex-wrap items-center gap-4"><Button type="button" variant="outline" disabled={readonly||locating} onClick={()=>{if(!navigator.geolocation){toast.error("Location is unavailable in this browser.");return;}setLocating(true);navigator.geolocation.getCurrentPosition((p)=>{onChange({...record,visit_latitude:p.coords.latitude,visit_longitude:p.coords.longitude});setLocating(false);},()=>{toast.error("Could not get location. Allow location access and try again.");setLocating(false);},{enableHighAccuracy:true,timeout:15000});}}><MapPin size={16}/>{locating?"Getting location…":"Capture current location"}</Button><span className="text-sm text-muted-foreground">{record["visit_latitude"]!=null&&record["visit_longitude"]!=null?`${Number(record["visit_latitude"]).toFixed(5)}, ${Number(record["visit_longitude"]).toFixed(5)}`:"Location not captured"}</span></div>
-    <label className="block space-y-2 text-sm">Short reason / visit note<Textarea maxLength={500} disabled={readonly} value={record["visit_note"]??""} onChange={(e)=>onChange({...record,visit_note:e.target.value})} placeholder="Purpose of visit, site condition, or next action"/></label>
-  </section>;
+function VisitEvidence({
+  record,
+  readonly,
+  onChange,
+  onFile,
+}: {
+  record: Row;
+  readonly: boolean;
+  onChange: (r: Row) => void;
+  onFile: (f: File | null) => void;
+}) {
+  const [locating, setLocating] = useState(false);
+  const photo = record["visit_photo_path"] as string | undefined;
+  return (
+    <section className="space-y-4 border-t pt-6">
+      <h3 className="font-semibold">Site visit evidence</h3>
+      <p className="text-sm text-muted-foreground">
+        Capture a site photo, use this device’s location, and add a short reason or outcome.
+        Evidence stays private with this task.
+      </p>
+      <label className="block space-y-2 text-sm">
+        Visit photo
+        <input
+          className="block w-full rounded border bg-background p-3"
+          type="file"
+          accept="image/jpeg,image/png,image/webp"
+          capture="environment"
+          disabled={readonly}
+          onChange={(e) => onFile(e.target.files?.[0] ?? null)}
+        />
+      </label>
+      {photo && (
+        <p className="text-xs text-muted-foreground">
+          Photo saved ·{" "}
+          <button
+            type="button"
+            className="underline"
+            onClick={async () => {
+              const r = await db.storage.from("site-visit-evidence").createSignedUrl(photo, 60);
+              if (r.error) toast.error(r.error.message);
+              else if (r.data) window.open(r.data.signedUrl, "_blank", "noopener");
+            }}
+          >
+            View private photo
+          </button>
+        </p>
+      )}
+      <div className="flex flex-wrap items-center gap-4">
+        <Button
+          type="button"
+          variant="outline"
+          disabled={readonly || locating}
+          onClick={() => {
+            if (!navigator.geolocation) {
+              toast.error("Location is unavailable in this browser.");
+              return;
+            }
+            setLocating(true);
+            navigator.geolocation.getCurrentPosition(
+              (p) => {
+                onChange({
+                  ...record,
+                  visit_latitude: p.coords.latitude,
+                  visit_longitude: p.coords.longitude,
+                });
+                setLocating(false);
+              },
+              () => {
+                toast.error("Could not get location. Allow location access and try again.");
+                setLocating(false);
+              },
+              { enableHighAccuracy: true, timeout: 15000 },
+            );
+          }}
+        >
+          <MapPin size={16} />
+          {locating ? "Getting location…" : "Capture current location"}
+        </Button>
+        <span className="text-sm text-muted-foreground">
+          {record["visit_latitude"] != null && record["visit_longitude"] != null
+            ? `${Number(record["visit_latitude"]).toFixed(5)}, ${Number(record["visit_longitude"]).toFixed(5)}`
+            : "Location not captured"}
+        </span>
+      </div>
+      <label className="block space-y-2 text-sm">
+        Short reason / visit note
+        <Textarea
+          maxLength={500}
+          disabled={readonly}
+          value={record["visit_note"] ?? ""}
+          onChange={(e) => onChange({ ...record, visit_note: e.target.value })}
+          placeholder="Purpose of visit, site condition, or next action"
+        />
+      </label>
+    </section>
+  );
 }
-function ApplicationFiles({leadId,userId,canWrite}:{leadId:string;userId:string;canWrite:boolean}) {
-  const [details,setDetails]=useState({consumer:"",state:"",discom:"",ref:""});
-  const [docType,setDocType]=useState("electricity_bill"),[typed,setTyped]=useState(""),[file,setFile]=useState<File|null>(null),[saving,setSaving]=useState(false);
-  const cache=useQueryClient();
-  const app=useQuery({queryKey:["application",leadId],queryFn:async()=>{const {data,error}=await db.from("scheme_applications").select("*").eq("lead_id",leadId).maybeSingle();if(error)throw error;return data;}});
-  const files=useQuery({queryKey:["application-files",app.data?.id],enabled:!!app.data?.id,queryFn:async()=>{const {data,error}=await db.from("application_documents").select("*").eq("application_id",app.data!.id).order("created_at");if(error)throw error;return data??[];}});
-  async function saveDetails(){setSaving(true);const {error}=await db.rpc("attach_solar_application",{target_lead:leadId,consumer:details.consumer,state_name:details.state,utility:details.discom,portal_ref:details.ref||null});setSaving(false);if(error)toast.error(error.message);else{await cache.invalidateQueries({queryKey:["application",leadId]});toast.success("PM Surya Ghar checklist added");}}
-  async function uploadDoc(){if(!app.data||(!file&&!typed.trim())){toast.error("Add typed details or choose a photo/PDF.");return;}setSaving(true);let path:string|null=null;try{if(file){if(file.size>10*1024*1024||!["image/jpeg","image/png","image/webp","application/pdf"].includes(file.type))throw Error("Choose a JPG, PNG, WebP or PDF under 10 MB.");path=`${app.data.id}/${docType}/${userId}/${crypto.randomUUID()}-${file.name.replace(/[^a-zA-Z0-9._-]/g,"_")}`;const uploaded=await db.storage.from("customer-documents").upload(path,file);if(uploaded.error)throw uploaded.error;}const {error}=await db.from("application_documents").insert({application_id:app.data.id,document_type:docType,storage_path:path,file_name:file?.name??null,typed_details:typed.trim()||null,uploaded_by:userId});if(error){if(path)await db.storage.from("customer-documents").remove([path]);throw error;}setFile(null);setTyped("");await files.refetch();toast.success("Application document saved securely");}catch(e){toast.error(e instanceof Error?e.message:"Upload failed");}finally{setSaving(false);}}
-  return <div className="mt-6 rounded border p-4"><h3 className="font-semibold">PM Surya Ghar documents</h3>{!app.data?<><p className="mt-2 text-sm text-muted-foreground">Add the electricity connection details to start a checklist for this lead.</p>{canWrite&&<div className="mt-4 grid gap-3 sm:grid-cols-2"><Input aria-label="Electricity consumer number" placeholder="Consumer / account number" value={details.consumer} onChange={e=>setDetails({...details,consumer:e.target.value})}/><Input aria-label="State" placeholder="State / Union Territory" value={details.state} onChange={e=>setDetails({...details,state:e.target.value})}/><Input aria-label="DISCOM" placeholder="Electricity provider (DISCOM)" value={details.discom} onChange={e=>setDetails({...details,discom:e.target.value})}/><Input aria-label="Portal application number" placeholder="Portal application number (optional)" value={details.ref} onChange={e=>setDetails({...details,ref:e.target.value})}/><Button type="button" disabled={saving} onClick={saveDetails}>Create PM Surya Ghar checklist</Button></div>}</>:<><p className="mt-2 text-sm text-muted-foreground">Consumer number {app.data.consumer_number} · {app.data.discom}, {app.data.state}{app.data.application_reference?` · Portal ref ${app.data.application_reference}`:""}</p>{canWrite&&<div className="mt-4 space-y-3 rounded bg-muted/50 p-3"><label className="block space-y-2 text-sm">Document<select className="block w-full rounded border bg-background p-3" value={docType} onChange={e=>setDocType(e.target.value)}><option value="electricity_bill">Latest electricity bill</option><option value="identity">Identity proof</option><option value="roof_authorization">Roof ownership / owner consent</option><option value="other">Other supporting information</option></select></label><label className="block space-y-2 text-sm">Photo or PDF (optional if adding typed details)<Input type="file" accept="image/jpeg,image/png,image/webp,application/pdf" onChange={e=>setFile(e.target.files?.[0]??null)}/></label><label className="block space-y-2 text-sm">Or enter details<Textarea maxLength={1500} value={typed} onChange={e=>setTyped(e.target.value)}/></label><Button type="button" variant="outline" disabled={saving||(!typed.trim()&&!file)} onClick={uploadDoc}>{saving?"Saving…":"Save document details"}</Button></div>}{files.data?.map((f)=> <div key={f.id} className="mt-3 flex flex-wrap justify-between gap-3 border-t pt-3 text-sm"><span className="capitalize">{f.document_type.replaceAll("_"," ")} · {f.file_name||"Typed details"}</span>{f.typed_details&&<p className="w-full text-muted-foreground">{f.typed_details}</p>}{f.storage_path&&<Button type="button" size="sm" variant="outline" onClick={async()=>{const r=await db.storage.from("customer-documents").createSignedUrl(f.storage_path!,60);if(r.error)toast.error(r.error.message);else if(r.data)window.open(r.data.signedUrl,"_blank","noopener");}}>Open secure file</Button>}</div>)}</>}</div>;
+function ApplicationFiles({
+  leadId,
+  userId,
+  canWrite,
+}: {
+  leadId: string;
+  userId: string;
+  canWrite: boolean;
+}) {
+  const [details, setDetails] = useState({ consumer: "", state: "", discom: "", ref: "" });
+  const [docType, setDocType] = useState("electricity_bill"),
+    [typed, setTyped] = useState(""),
+    [file, setFile] = useState<File | null>(null),
+    [saving, setSaving] = useState(false);
+  const cache = useQueryClient();
+  const app = useQuery({
+    queryKey: ["application", leadId],
+    queryFn: async () => {
+      const { data, error } = await db
+        .from("scheme_applications")
+        .select("*")
+        .eq("lead_id", leadId)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+  });
+  const files = useQuery({
+    queryKey: ["application-files", app.data?.id],
+    enabled: !!app.data?.id,
+    queryFn: async () => {
+      const { data, error } = await db
+        .from("application_documents")
+        .select("*")
+        .eq("application_id", app.data!.id)
+        .order("created_at");
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+  async function saveDetails() {
+    setSaving(true);
+    const { error } = await db.rpc("attach_solar_application", {
+      target_lead: leadId,
+      consumer: details.consumer,
+      state_name: details.state,
+      utility: details.discom,
+      portal_ref: details.ref || null,
+    });
+    setSaving(false);
+    if (error) toast.error(error.message);
+    else {
+      await cache.invalidateQueries({ queryKey: ["application", leadId] });
+      toast.success("PM Surya Ghar checklist added");
+    }
+  }
+  async function uploadDoc() {
+    if (!app.data || (!file && !typed.trim())) {
+      toast.error("Add typed details or choose a photo/PDF.");
+      return;
+    }
+    setSaving(true);
+    let path: string | null = null;
+    try {
+      if (file) {
+        if (
+          file.size > 10 * 1024 * 1024 ||
+          !["image/jpeg", "image/png", "image/webp", "application/pdf"].includes(file.type)
+        )
+          throw Error("Choose a JPG, PNG, WebP or PDF under 10 MB.");
+        path = `${app.data.id}/${docType}/${userId}/${crypto.randomUUID()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
+        const uploaded = await db.storage.from("customer-documents").upload(path, file);
+        if (uploaded.error) throw uploaded.error;
+      }
+      const { error } = await db.from("application_documents").insert({
+        application_id: app.data.id,
+        document_type: docType,
+        storage_path: path,
+        file_name: file?.name ?? null,
+        typed_details: typed.trim() || null,
+        uploaded_by: userId,
+      });
+      if (error) {
+        if (path) await db.storage.from("customer-documents").remove([path]);
+        throw error;
+      }
+      setFile(null);
+      setTyped("");
+      await files.refetch();
+      toast.success("Application document saved securely");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Upload failed");
+    } finally {
+      setSaving(false);
+    }
+  }
+  return (
+    <div className="mt-6 rounded border p-4">
+      <h3 className="font-semibold">PM Surya Ghar documents</h3>
+      {!app.data ? (
+        <>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Add the electricity connection details to start a checklist for this lead.
+          </p>
+          {canWrite && (
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <Input
+                aria-label="Electricity consumer number"
+                placeholder="Consumer / account number"
+                value={details.consumer}
+                onChange={(e) => setDetails({ ...details, consumer: e.target.value })}
+              />
+              <Input
+                aria-label="State"
+                placeholder="State / Union Territory"
+                value={details.state}
+                onChange={(e) => setDetails({ ...details, state: e.target.value })}
+              />
+              <Input
+                aria-label="DISCOM"
+                placeholder="Electricity provider (DISCOM)"
+                value={details.discom}
+                onChange={(e) => setDetails({ ...details, discom: e.target.value })}
+              />
+              <Input
+                aria-label="Portal application number"
+                placeholder="Portal application number (optional)"
+                value={details.ref}
+                onChange={(e) => setDetails({ ...details, ref: e.target.value })}
+              />
+              <Button type="button" disabled={saving} onClick={saveDetails}>
+                Create PM Surya Ghar checklist
+              </Button>
+            </div>
+          )}
+        </>
+      ) : (
+        <>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Consumer number {app.data.consumer_number} · {app.data.discom}, {app.data.state}
+            {app.data.application_reference
+              ? ` · Portal ref ${app.data.application_reference}`
+              : ""}
+          </p>
+          {canWrite && (
+            <div className="mt-4 space-y-3 rounded bg-muted/50 p-3">
+              <label className="block space-y-2 text-sm">
+                Document
+                <select
+                  className="block w-full rounded border bg-background p-3"
+                  value={docType}
+                  onChange={(e) => setDocType(e.target.value)}
+                >
+                  <option value="electricity_bill">Latest electricity bill</option>
+                  <option value="identity">Identity proof</option>
+                  <option value="roof_authorization">Roof ownership / owner consent</option>
+                  <option value="other">Other supporting information</option>
+                </select>
+              </label>
+              <label className="block space-y-2 text-sm">
+                Photo or PDF (optional if adding typed details)
+                <Input
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,application/pdf"
+                  onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+                />
+              </label>
+              <label className="block space-y-2 text-sm">
+                Or enter details
+                <Textarea
+                  maxLength={1500}
+                  value={typed}
+                  onChange={(e) => setTyped(e.target.value)}
+                />
+              </label>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={saving || (!typed.trim() && !file)}
+                onClick={uploadDoc}
+              >
+                {saving ? "Saving…" : "Save document details"}
+              </Button>
+            </div>
+          )}
+          {files.data?.map((f) => (
+            <div
+              key={f.id}
+              className="mt-3 flex flex-wrap justify-between gap-3 border-t pt-3 text-sm"
+            >
+              <span className="capitalize">
+                {f.document_type.replaceAll("_", " ")} · {f.file_name || "Typed details"}
+              </span>
+              {f.typed_details && <p className="w-full text-muted-foreground">{f.typed_details}</p>}
+              {f.storage_path && (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={async () => {
+                    const r = await db.storage
+                      .from("customer-documents")
+                      .createSignedUrl(f.storage_path!, 60);
+                    if (r.error) toast.error(r.error.message);
+                    else if (r.data) window.open(r.data.signedUrl, "_blank", "noopener");
+                  }}
+                >
+                  Open secure file
+                </Button>
+              )}
+            </div>
+          ))}
+        </>
+      )}
+    </div>
+  );
 }
 function Editor({
   field: f,
@@ -935,59 +1458,297 @@ function LineItems({
     </div>
   );
 }
-function printQuote(row: Row, refs: Record<string, Row[]>) {
+function quoteDetails(row: Row, refs: Record<string, Row[]>) {
+  const customer =
+    refs["customers"]?.find((x) => x["id"] === row["customer_id"]) ||
+    refs["leads"]?.find((x) => x["id"] === row["lead_id"]);
+  return {
+    customer,
+    message: `Easternbay Solar quotation ${row["quote_number"]} for ${customer?.["name"] || "customer"}: total ${money(Number(row["total_amount"]))}. Valid until ${row["valid_until"] || "as stated"}.`,
+  };
+}
+function quoteAmount(value: number) {
+  return new Intl.NumberFormat("en-IN", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(value || 0);
+}
+function amountInWords(value: number) {
+  const small = [
+    "Zero",
+    "One",
+    "Two",
+    "Three",
+    "Four",
+    "Five",
+    "Six",
+    "Seven",
+    "Eight",
+    "Nine",
+    "Ten",
+    "Eleven",
+    "Twelve",
+    "Thirteen",
+    "Fourteen",
+    "Fifteen",
+    "Sixteen",
+    "Seventeen",
+    "Eighteen",
+    "Nineteen",
+  ];
+  const tens = [
+    "",
+    "",
+    "Twenty",
+    "Thirty",
+    "Forty",
+    "Fifty",
+    "Sixty",
+    "Seventy",
+    "Eighty",
+    "Ninety",
+  ];
+  const underThousand = (n: number): string => {
+    if (n < 20) return small[n]!;
+    if (n < 100) return `${tens[Math.floor(n / 10)]}${n % 10 ? ` ${small[n % 10]}` : ""}`;
+    return `${small[Math.floor(n / 100)]} Hundred${n % 100 ? ` ${underThousand(n % 100)}` : ""}`;
+  };
+  let n = Math.max(0, Math.floor(value));
+  if (!n) return "Zero Rupees Only";
+  const parts: string[] = [];
+  for (const [unit, size] of [
+    ["Crore", 10000000],
+    ["Lakh", 100000],
+    ["Thousand", 1000],
+    ["", 1],
+  ] as const) {
+    const count = Math.floor(n / size);
+    if (count) parts.push(`${underThousand(count)}${unit ? ` ${unit}` : ""}`);
+    n %= size;
+  }
+  return `${parts.join(" ")} Rupees Only`;
+}
+function shareQuote(row: Row, refs: Record<string, Row[]>, method: "whatsapp" | "email" | "copy") {
+  const { customer, message } = quoteDetails(row, refs);
+  if (method === "whatsapp") {
+    const phone = String(customer?.["mobile"] || "").replace(/\D/g, "");
+    window.open(
+      `https://wa.me/${phone}?text=${encodeURIComponent(message)}`,
+      "_blank",
+      "noopener,noreferrer",
+    );
+  } else if (method === "email") {
+    window.location.href = `mailto:${encodeURIComponent(customer?.["email"] || "")}?subject=${encodeURIComponent(`Quotation ${row["quote_number"]} - Easternbay Solar`)}&body=${encodeURIComponent(message)}`;
+  } else {
+    void navigator.clipboard.writeText(message).then(
+      () => toast.success("Quotation details copied"),
+      () => toast.error("Could not copy quotation details"),
+    );
+  }
+}
+function printQuote(row: Row, refs: Record<string, Row[]>, autoPrint: boolean) {
   const w = window.open("", "_blank");
   if (!w) return;
-  const e = (s: any) =>
+  const e = (s: unknown) =>
     String(s ?? "").replace(
       /[&<>"']/g,
       (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!,
     );
-  const customer =
-    refs["customers"]?.find((x) => x["id"] === row["customer_id"]) ||
-    refs["leads"]?.find((x) => x["id"] === row["lead_id"]);
+  const { customer } = quoteDetails(row, refs);
+  const lines: Row[] = row["line_items"] ?? [];
+  const taxable = lines.reduce(
+    (sum, l) => sum + Number(l["quantity"] || 0) * Number(l["rate"] || 0),
+    0,
+  );
+  const taxes = [...new Set(lines.map((l) => Number(l["gst"] || 0)))]
+    .sort((a, b) => a - b)
+    .map((rate) => ({
+      rate,
+      amount:
+        lines
+          .filter((l) => Number(l["gst"] || 0) === rate)
+          .reduce(
+            (sum, l) => sum + (Number(l["quantity"] || 0) * Number(l["rate"] || 0) * rate) / 100,
+            0,
+          ) / 2,
+    }));
+  const date = row["created_at"]
+    ? new Date(row["created_at"]).toLocaleDateString("en-IN", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+      })
+    : new Date().toLocaleDateString("en-IN");
+  const logo = `${window.location.origin}/brand/easternbay-logo-transparent.png`;
   w.document.write(
     "<html><head><title>" +
       e(row["quote_number"]) +
-      "</title><style>body{font:16px system-ui;margin:48px}table{border-collapse:collapse;width:100%}td,th{text-align:left;border-bottom:1px solid #ddd;padding:12px}h1{font-size:32px}</style></head><body><h1>Easternbay Renewables</h1><h2>Quotation " +
+      "</title><style>*{box-sizing:border-box}body{font:13px Arial,sans-serif;color:#222;margin:36px auto;max-width:900px}.top{display:flex;justify-content:space-between;align-items:flex-start}.brand h1{font-size:24px;margin:5px 0}.brand p{margin:3px 0}.logo{width:82px;height:82px;object-fit:contain}.eyebrow{text-transform:uppercase;letter-spacing:3px;color:#db8b00;font-weight:bold}.meta{display:flex;justify-content:space-between;border-bottom:1px solid #ddd;padding:18px 0}.customer{padding:12px 0}.quote-table{border-collapse:collapse;width:100%;margin-top:16px}.quote-table td,.quote-table th{text-align:left;border-top:1px solid #b9d7e8;padding:9px 7px}.quote-table th{border-top:2px solid #e89400;border-bottom:2px solid #e89400;background:#f7f8f8}.num{text-align:right!important;white-space:nowrap}.summary{margin:6px 0 18px auto;width:min(360px,100%)}.summary div{display:flex;justify-content:space-between;padding:3px 0}.total{font-size:19px;font-weight:bold;border-top:1px solid #555;padding-top:7px!important}.bank{border-top:2px solid #e89400;margin-top:10px;padding-top:16px}.bankgrid{display:grid;grid-template-columns:180px 1fr;gap:7px}.actions{padding:12px 0}@media print{body{margin:0 auto}.actions{display:none}}@page{size:A4;margin:15mm}</style></head><body><div class='top'><div class='brand'><div class='eyebrow'>Quotation</div><h1>Easternbay Solar</h1><p><b>GSTIN</b> " +
+      e(row["company_gst_number"] || "37EXFPR0556E1ZC") +
+      "</p><p>" +
+      e(
+        row["company_address"] ||
+          "1-128/11, Near Hanuman Statue, Rajugari Beedu, Payakaraopeta, Anakapalli, Andhra Pradesh, 531126",
+      ).replaceAll("\n", "<br>") +
+      "</p><p><b>Mobile</b> +91 93468 28227</p></div><div style='text-align:right'><div class='eyebrow' style='color:#333'>Original for recipient</div><img class='logo' src='" +
+      e(logo) +
+      "'></div></div><div class='meta'><span><b>Quotation #:</b> " +
       e(row["quote_number"]) +
-      "</h2><p>" +
+      "</span><span><b>Quotation Date:</b> " +
+      e(date) +
+      "</span><span><b>Validity:</b> " +
+      e(row["valid_until"] || "-") +
+      "</span></div><div class='customer'><b>Customer Details:</b><p><b>" +
       e(customer?.["name"]) +
-      " · " +
+      "</b> · " +
       e(customer?.["mobile"]) +
-      "</p><p>Valid until: " +
-      e(row["valid_until"]) +
-      " · " +
-      e(row["capacity_kw"]) +
-      " kW</p><table><tr><th>Item</th><th>Quantity</th><th>Rate</th><th>GST</th></tr>" +
-      (row["line_items"] ?? [])
-        .map(
-          (l: Row) =>
+      "</p><p>Place of Supply: " +
+      e(customer?.["state"] || customer?.["city"] || customer?.["location"] || "-") +
+      "</p></div><table class='quote-table'><thead><tr><th>#</th><th>Item</th><th class='num'>Rate / Item</th><th class='num'>Qty</th><th class='num'>Taxable Value</th><th class='num'>Tax Amount</th><th class='num'>Amount</th></tr></thead><tbody>" +
+      lines
+        .map((l, i) => {
+          const base = Number(l["quantity"] || 0) * Number(l["rate"] || 0);
+          const tax = (base * Number(l["gst"] || 0)) / 100;
+          return (
             "<tr><td>" +
+            (i + 1) +
+            "</td><td>" +
             e(l["description"]) +
-            "</td><td>" +
+            "</td><td class='num'>" +
+            e(quoteAmount(Number(l["rate"]))) +
+            "</td><td class='num'>" +
             e(l["quantity"]) +
-            "</td><td>" +
-            e(money(l["rate"])) +
-            "</td><td>" +
+            "</td><td class='num'>" +
+            e(quoteAmount(base)) +
+            "</td><td class='num'>" +
+            e(quoteAmount(tax)) +
+            " (" +
             e(l["gst"]) +
-            "%</td></tr>",
+            "%)</td><td class='num'>" +
+            e(quoteAmount(base + tax)) +
+            "</td></tr>"
+          );
+        })
+        .join("") +
+      "</tbody></table><div class='summary'><div><b>Taxable Amount</b><b>" +
+      "₹" +
+      e(quoteAmount(taxable)) +
+      "</b></div>" +
+      taxes
+        .map(
+          (t) =>
+            "<div><span>CGST " +
+            t.rate / 2 +
+            "%</span><span>" +
+            "₹" +
+            e(quoteAmount(t.amount)) +
+            "</span></div><div><span>SGST " +
+            t.rate / 2 +
+            "%</span><span>" +
+            "₹" +
+            e(quoteAmount(t.amount)) +
+            "</span></div>",
         )
         .join("") +
-      "</table><p>Subtotal: " +
-      e(money(row["subtotal"])) +
-      "</p><p>GST: " +
-      e(money(row["gst_amount"])) +
-      "</p><p>Confirmed subsidy: " +
-      e(money(row["subsidy_amount"])) +
-      "</p><h2>Total: " +
-      e(money(row["total_amount"])) +
-      "</h2><p>" +
-      e(row["notes"]) +
-      "</p></body></html>",
+      (Number(row["subsidy_amount"] || 0) > 0
+        ? "<div><span>Confirmed subsidy</span><span>-" +
+          "₹" +
+          e(quoteAmount(Number(row["subsidy_amount"]))) +
+          "</span></div>"
+        : "") +
+      "<div class='total'><span>Total</span><span>" +
+      "₹" +
+      e(quoteAmount(Number(row["total_amount"]))) +
+      "</span></div></div><p>Total Items / Qty: " +
+      lines.length +
+      " / " +
+      lines.reduce((n, l) => n + Number(l["quantity"] || 0), 0) +
+      "</p><p><b>Total amount (in words):</b> INR " +
+      e(amountInWords(Number(row["total_amount"]))) +
+      ".</p><p><b>Terms and notes</b><br>" +
+      e(row["notes"] || "").replaceAll("\n", "<br>") +
+      "</p><div class='bank'><b>Bank Details</b><div class='bankgrid'>" +
+      e(
+        row["bank_details"] ||
+          "Bank: State Bank of India\nAccount Holder: EASTERNBAY SOLAR\nAccount #: 45338592498\nIFSC Code: SBIN0003064\nBranch: ADB TUNI",
+      )
+        .split("\n")
+        .map(
+          (line) =>
+            "<span>" +
+            e(line.split(":")[0]) +
+            "</span><b>" +
+            e(line.includes(":") ? line.slice(line.indexOf(":") + 1).trim() : "") +
+            "</b>",
+        )
+        .join("") +
+      "</div></div><div style='text-align:right;margin-top:28px'>For Easternbay Solar<br><br><br>Authorized Signatory</div><div class='actions'><button onclick='window.print()'>Print / Save as PDF</button></div><footer style='border-top:1px solid #ddd;padding-top:10px'>This is a digitally generated quotation.</footer></body></html>",
   );
   w.document.close();
-  w.print();
+  if (autoPrint) w.addEventListener("load", () => w.print(), { once: true });
+}
+
+function ProductImageEditor({
+  userId,
+  value,
+  onChange,
+}: {
+  userId: string;
+  value: string;
+  onChange: (url: string) => void;
+}) {
+  const [uploading, setUploading] = useState(false);
+  return (
+    <div className="space-y-2">
+      <label className="flex items-center gap-2 text-sm font-medium">
+        <ImagePlus size={16} /> Product image
+      </label>
+      {value && (
+        <img src={value} alt="Product preview" className="h-32 w-40 rounded border object-cover" />
+      )}
+      <Input
+        type="file"
+        aria-label="Upload product image"
+        accept="image/jpeg,image/png,image/webp"
+        disabled={uploading}
+        onChange={async (e) => {
+          const file = e.target.files?.[0];
+          if (!file) return;
+          if (
+            file.size > 5 * 1024 * 1024 ||
+            !["image/jpeg", "image/png", "image/webp"].includes(file.type)
+          ) {
+            toast.error("Choose a JPG, PNG or WebP image under 5 MB.");
+            e.target.value = "";
+            return;
+          }
+          setUploading(true);
+          try {
+            const path = `${userId}/${crypto.randomUUID()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
+            const result = await db.storage
+              .from("product-images")
+              .upload(path, file, { upsert: false });
+            if (result.error) toast.error(result.error.message);
+            else {
+              const { data } = db.storage.from("product-images").getPublicUrl(path);
+              onChange(data.publicUrl);
+              toast.success("Product image uploaded");
+            }
+          } catch (error) {
+            toast.error(error instanceof Error ? error.message : "Unable to upload the image");
+          } finally {
+            setUploading(false);
+            e.target.value = "";
+          }
+        }}
+      />
+      {uploading && (
+        <p role="status" className="text-sm">
+          Uploading image…
+        </p>
+      )}
+    </div>
+  );
 }
 function Uploads({ userId }: { userId: string }) {
   const projects = useRows("projects"),
@@ -1088,4 +1849,3 @@ function Uploads({ userId }: { userId: string }) {
     </div>
   );
 }
-
